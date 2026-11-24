@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { CheckCircle2, Droplets, Scale, ScrollText, Users } from 'lucide-react';
+import { CheckCircle2, Droplets, Image as ImageIcon, Scale, ScrollText, Users } from 'lucide-react';
 import {
   FARD_WAJIB_SUNNAH_ITEMS,
   MEN_WOMEN_PRAYER_RULES,
@@ -435,6 +435,22 @@ export function NamazPage({ lang }: NamazPageProps) {
         <div className="space-y-5">
           {NAMAZ_STEPS.map((s) => (
             <div key={s.step} className="bg-white rounded-2xl border border-[#dce7e0] p-6">
+              {/* [Insert Image: {s.title_bn}] — replace this placeholder with a step illustration */}
+              <figure className="mb-4">
+                <div className="aspect-[16/9] rounded-xl border border-dashed border-[#c8d8d0] bg-[#f7faf8] flex flex-col items-center justify-center gap-1.5 text-center px-4">
+                  <ImageIcon className="w-6 h-6 text-[#8aa79a]" />
+                  <p className="text-xs font-semibold text-[#5a7066]">
+                    {lang === 'bn'
+                      ? `[ছবি যোগ করুন: ${s.title_bn}]`
+                      : `[Insert Image: ${s.title_en}]`}
+                  </p>
+                  <p className="text-[10px] text-[#8aa79a]">
+                    {lang === 'bn'
+                      ? `ধাপ ${s.step} — পুরুষ ও মহিলাদের ভঙ্গি`
+                      : `Step ${s.step} — men and women postures`}
+                  </p>
+                </div>
+              </figure>
               <div className="flex items-start gap-3">
                 <CheckCircle2 className="w-6 h-6 text-[#087653] shrink-0 mt-0.5" />
                 <div className="w-full">

@@ -820,6 +820,26 @@ async function startServer() {
   });
 
   // --- Server-Side Gemini AI Endpoints ---
+
+  // Valid Google Gemini API models. The previous names (gemini-4-hydrogen,
+  // gemini-3.5-transcribe) do not exist upstream, so every live call failed.
+  const CHAT_MODEL = 'gemini-2.5-flash';
+  const CHAT_MODEL_PRO = 'gemini-2.5-pro';
+  const CHAT_MODEL_LITE = 'gemini-2.5-flash-lite';
+  const TRANSCRIBE_MODEL = 'gemini-2.5-flash';
+  const CHAT_MODELS = [CHAT_MODEL, CHAT_MODEL_PRO, CHAT_MODEL_LITE];
+
+  function resolveModel(requested: string): string {
+    const wanted = requested.trim();
+    if (!wanted) return CHAT_MODEL;
+    return CHAT_MODELS.includes(wanted) ? wanted : CHAT_MODEL;
+  }
+
+  // 2.5 flash and pro accept thinkingConfig; flash-lite does not.
+  function supportsThinking(model: string): boolean {
+    return model === CHAT_MODEL || model === CHAT_MODEL_PRO;
+  }
+
   function getServerGeminiKey(): string {
     return (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '').trim();
   }
@@ -890,7 +910,7 @@ async function startServer() {
     res.json({
       ok: true,
       geminiConfigured: configured,
-      freeModels: ['gemini-4-hydrogen', 'gemini-3.1-flash-lite', 'gemini-3.5-transcribe'],
+      freeModels: [CHAT_MODEL, CHAT_MODEL_LITE, TRANSCRIBE_MODEL],
       paidMediaModels: ['lyria-3-clip-preview', 'lyria-3-pro-preview', 'gemini-omni-1.2-flash'],
       timestamp: new Date().toISOString(),
     });
@@ -918,13 +938,7 @@ async function startServer() {
       }
 
       const requestedModel = cleanText(req.body?.model, 48);
-      const allowedModels = new Set([
-        'gemini-4-hydrogen',
-        'gemini-3.1-flash-lite',
-        'gemini-4-neon',
-        'gemini-4-carbon',
-      ]);
-      const model = allowedModels.has(requestedModel) ? requestedModel : 'gemini-4-hydrogen';
+      const model = resolveModel(requestedModel);
 
       const personaId = cleanText(req.body?.personaId, 48) || 'islamic-scholar';
       const customPrompt = cleanText(req.body?.customSystemInstruction, 1500);
@@ -965,11 +979,7 @@ async function startServer() {
         systemInstruction,
       };
 
-      if (
-        (model === 'gemini-4-hydrogen' || model === 'gemini-4-neon' || model === 'gemini-4-carbon') &&
-        thinkingDepth &&
-        thinkingLevelMap[thinkingDepth]
-      ) {
+      if (supportsThinking(model) && thinkingDepth && thinkingLevelMap[thinkingDepth]) {
         config.thinkingConfig = {
           thinkingLevel: thinkingLevelMap[thinkingDepth],
         };
@@ -1025,7 +1035,7 @@ async function startServer() {
 
       const ai = createGeminiClient();
       const response = await ai.models.generateContent({
-        model: 'gemini-3.5-transcribe',
+        model: TRANSCRIBE_MODEL,
         contents: {
           parts: [
             {
@@ -1041,7 +1051,7 @@ async function startServer() {
 
       res.json({
         transcript: response.text ?? '',
-        model: 'gemini-3.5-transcribe',
+        model: TRANSCRIBE_MODEL,
         mimeType,
       });
     } catch (err) {
@@ -1190,7 +1200,7 @@ async function startServer() {
       const ai = createGeminiClient();
       const trResponse = await withRetryOnce(() =>
         ai.models.generateContent({
-          model: 'gemini-3.5-transcribe',
+          model: TRANSCRIBE_MODEL,
           contents: {
             parts: [
               { inlineData: { mimeType, data: rawBase64 } },
@@ -1230,7 +1240,7 @@ Please respond concisely in English:
 
       const fbResponse = await withRetryOnce(() =>
         ai.models.generateContent({
-          model: 'gemini-4-hydrogen',
+          model: CHAT_MODEL,
           contents: feedbackPrompt,
           config: {
             thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
@@ -1241,7 +1251,7 @@ Please respond concisely in English:
       res.json({
         transcript,
         feedback: (fbResponse.text ?? '').trim(),
-        model: 'gemini-3.5-transcribe + gemini-4-hydrogen',
+        model: `${TRANSCRIBE_MODEL} + ${CHAT_MODEL}`,
       });
     } catch (err) {
       const { status, message } = extractAiError(err);

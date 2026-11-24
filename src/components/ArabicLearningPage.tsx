@@ -531,7 +531,7 @@ export function ArabicLearningPage({
       setRecitationResult({
         transcript: data.transcript || '',
         feedback: data.feedback || '',
-        model: data.model || 'gemini-3.5-transcribe + gemini-4-hydrogen',
+        model: data.model || 'gemini-2.5-flash',
       });
       setProgress((prev) => ({
         ...prev,

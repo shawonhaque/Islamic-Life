@@ -17,6 +17,7 @@ export type SectionId =
   | 'hajj-umrah'
   | 'names-99'
   | 'terrarium'
+  | 'knowledge'
   | 'arabic-learning'
   | 'ai-studio'
   | 'settings'

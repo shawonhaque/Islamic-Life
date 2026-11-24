@@ -58,7 +58,7 @@ import {
   getUpcomingIslamicEvents,
   gregorianToHijri,
 } from '../utils/islamicMath';
-import { TerrariumViewport } from './TerrariumViewport';
+import { EarthGlobe } from './EarthGlobe';
 import { VerseImageModal, type VerseImageTarget } from './VerseImageModal';
 
 interface HomePageProps {
@@ -625,7 +625,7 @@ export function HomePage({
             className="hidden sm:inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white border border-[#ebe6da] hover:border-[#b58328] text-xs font-semibold text-[#1f2421] transition-colors cursor-pointer"
           >
             <Sparkles className="w-3.5 h-3.5 text-[#b58328]" />
-            <span>{lang === 'bn' ? '৩ডি টেরারিয়াম গার্ডেন' : '3D Botanical Sanctuary'}</span>
+            <span>{lang === 'bn' ? '৩ডি পৃথিবী গ্লোব' : '3D Earth Globe'}</span>
           </button>
         </div>
       </div>
@@ -676,8 +676,18 @@ export function HomePage({
               backgroundColor: skyTheme.backgroundColor,
               backgroundImage: skyTheme.backgroundImage,
             }}
-            className="rounded-2xl p-6 sm:p-7 text-white flex-1 flex flex-col justify-between shadow-sm transition-all duration-700"
+            className="relative overflow-hidden rounded-2xl p-6 sm:p-7 text-white flex-1 flex flex-col justify-between shadow-sm transition-all duration-700"
           >
+            {/* Soft moonlight wash behind the card content */}
+            <div
+              aria-hidden="true"
+              className="pointer-events-none absolute -top-16 -right-16 w-72 h-72 rounded-full"
+              style={{
+                background:
+                  'radial-gradient(circle, rgba(246,211,123,0.30) 0%, rgba(246,211,123,0.10) 45%, transparent 70%)',
+              }}
+            />
+
             {/* Card Header Row */}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2 text-xs text-white/90">
@@ -711,7 +721,25 @@ export function HomePage({
             {/* Live Current Clock + Next Prayer Countdown + Live Weather Panel */}
             <div className="my-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <div className="flex items-baseline gap-3">
+                <div className="flex items-center gap-3">
+                  <svg
+                    data-testid="home-hero-crescent"
+                    aria-hidden="true"
+                    viewBox="0 0 100 100"
+                    className="w-10 h-10 sm:w-12 sm:h-12 shrink-0 drop-shadow-[0_0_14px_rgba(246,211,123,0.55)]"
+                  >
+                    <defs>
+                      <linearGradient id="heroMoonBody" x1="0" y1="0" x2="1" y2="1">
+                        <stop offset="0%" stopColor="#fff8e3" />
+                        <stop offset="60%" stopColor="#f6d37b" />
+                        <stop offset="100%" stopColor="#d4a84f" />
+                      </linearGradient>
+                    </defs>
+                    <path
+                      d="M64 6a46 46 0 1 0 25 76A50 50 0 0 1 64 6Z"
+                      fill="url(#heroMoonBody)"
+                    />
+                  </svg>
                   <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-white">
                     {nextMeta[lang]}
                   </h1>
@@ -1409,24 +1437,30 @@ export function HomePage({
         })}
       </div>
 
-      {/* Interactive 3D Botanical Glass Terrarium Sanctuary Section */}
+      {/* Interactive Earth globe section */}
       <section className="bg-white rounded-2xl border border-[#ebe6da] p-4 sm:p-6 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h2 className="font-display text-lg sm:text-xl font-bold text-[#1f2421]">
-              {lang === 'bn'
-                ? 'ইন্টারেক্টিভ ৩ডি বোটানিক্যাল টেরারিয়াম'
-                : 'Interactive 3D Botanical Sanctuary'}
+              {lang === 'bn' ? 'পৃথিবী — ইন্টারেক্টিভ ৩ডি গ্লোব' : 'Earth — Interactive 3D Globe'}
             </h2>
             <p className="text-xs sm:text-sm text-[#6e7268]">
               {lang === 'bn'
-                ? 'নামাজের ওয়াক্ত অনুযায়ী আলো, আবহাওয়া ও ৩ডি ক্যামেরা নিয়ন্ত্রণ করুন।'
-                : 'Explore prayer-synced day/night lighting, rain/mist weather, and interactive 3D flora.'}
+                ? 'মহাকাশ থেকে পৃথিবী দেখুন, ড্র্যাগ করে ঘোরান এবং আপনার শহরের অবস্থান খুঁজে নিন।'
+                : 'View the planet from orbit, drag to spin it, and locate your city on the globe.'}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('qibla')}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[#dce7e0] text-xs font-semibold text-[#087653] hover:bg-[#eef5f0] cursor-pointer"
+          >
+            <Compass className="w-3.5 h-3.5" />
+            {lang === 'bn' ? 'কিবলা কম্পাস' : 'Qibla compass'}
+          </button>
         </div>
 
-        <TerrariumViewport
+        <EarthGlobe
           lang={lang}
           city={city}
           fullscreen={fullscreenTerrarium}

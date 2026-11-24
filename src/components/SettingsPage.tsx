@@ -1473,7 +1473,7 @@ export function SettingsPage({
                 </div>
                 <div className="rounded-xl bg-[#faf7f0] border border-[#ebe6da] p-3.5 space-y-1">
                   <p className="font-bold text-[#1f2421]">Maps, Weather & 3D Graphics</p>
-                  <p>Google Maps Platform (Qibla Geodesic Line), Open-Meteo (Live Weather & Timezone), and Three.js (3D Qibla Compass & Botanical Sanctuary).</p>
+                  <p>Google Maps Platform (Qibla Geodesic Line), Open-Meteo (Live Weather & Timezone), and Three.js (3D Qibla Compass & Earth Globe).</p>
                 </div>
               </div>
             )}

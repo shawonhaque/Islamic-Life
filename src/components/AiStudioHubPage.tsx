@@ -33,7 +33,12 @@ import {
   type StudyNoteRecord,
 } from '../contexts/AuthContext';
 import type { Language } from '../types/islamic';
-import { safeReadJson } from '../utils/safeFetch';
+import {
+  API_UNAVAILABLE_MESSAGE_BN,
+  ApiUnavailableError,
+  postJson,
+  safeReadJson,
+} from '../utils/safeFetch';
 
 interface AiStudioHubPageProps {
   lang: Language;
@@ -43,7 +48,7 @@ interface AiStudioHubPageProps {
 }
 
 type StudioTab = 'chat' | 'transcribe' | 'notes' | 'media' | 'academy' | 'settings';
-type ChatModelId = 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite';
+type ChatModelId = 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
 type ThinkingDepth = 'low' | 'medium' | 'high';
 
 interface LocalChatMsg {
@@ -149,7 +154,7 @@ export function AiStudioHubPage({
 
   const [cloudMessages, setCloudMessages] = useState<ChatMessageRecord[]>([]);
   const [localMessages, setLocalMessages] = useState<LocalChatMsg[]>([]);
-  const [chatModel, setChatModel] = useState<ChatModelId>('gemini-4-hydrogen');
+  const [chatModel, setChatModel] = useState<ChatModelId>('gemini-2.5-flash');
   const [personaId, setPersonaId] = useState<string>('islamic-scholar');
   const [thinkingDepth, setThinkingDepth] = useState<ThinkingDepth>('medium');
   const [customInstruction, setCustomInstruction] = useState('');
@@ -294,12 +299,12 @@ export function AiStudioHubPage({
   const handlePersonaChange = (nextPersona: string) => {
     setPersonaId(nextPersona);
     if (nextPersona === 'deep-reasoner') {
-      setChatModel('gemini-4-hydrogen');
+      setChatModel('gemini-2.5-flash');
       setThinkingDepth('high');
     } else if (nextPersona === 'daily-companion') {
-      setChatModel('gemini-3.1-flash-lite');
+      setChatModel('gemini-2.5-flash-lite');
     } else {
-      setChatModel('gemini-4-hydrogen');
+      setChatModel('gemini-2.5-flash');
       setThinkingDepth('medium');
     }
   };
@@ -334,20 +339,16 @@ export function AiStudioHubPage({
     }
 
     try {
-      const res = await fetch('/api/ai/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+      const data = await postJson<{ text?: string; error?: string }>(
+        '/api/ai/chat',
+        {
           model: chatModel,
           personaId,
           customSystemInstruction: customInstruction.trim(),
           thinkingDepth,
           history: historySnapshot,
           message: text,
-        }),
-      });
-      const data = await safeReadJson<{ text?: string; error?: string }>(
-        res,
+        },
         'Chat request failed.'
       );
       const replyText = String(data.text || '').trim();
@@ -381,7 +382,11 @@ export function AiStudioHubPage({
         ]);
       }
     } catch (err) {
-      setChatError(err instanceof Error ? err.message : 'Unable to complete chat request.');
+      if (err instanceof ApiUnavailableError) {
+        setChatError(lang === 'bn' ? API_UNAVAILABLE_MESSAGE_BN : err.message);
+      } else {
+        setChatError(err instanceof Error ? err.message : 'Unable to complete chat request.');
+      }
     } finally {
       setChatLoading(false);
     }
@@ -910,8 +915,9 @@ export function AiStudioHubPage({
                     onChange={(e) => setChatModel(e.target.value as ChatModelId)}
                     className="w-full px-2.5 py-2 rounded-xl border border-[#ebe6da] bg-[#faf7f0] text-xs font-medium text-[#1f2421] focus:outline-none focus:border-[#087653]"
                   >
-                    <option value="gemini-4-hydrogen">Gemini 4 Hydrogen</option>
-                    <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite</option>
+                    <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                    <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+                    <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite</option>
                   </select>
                 </div>
 
@@ -921,7 +927,7 @@ export function AiStudioHubPage({
                   </label>
                   <select
                     value={thinkingDepth}
-                    disabled={chatModel !== 'gemini-4-hydrogen'}
+                    disabled={chatModel === 'gemini-2.5-flash-lite'}
                     onChange={(e) => setThinkingDepth(e.target.value as ThinkingDepth)}
                     className="w-full px-2.5 py-2 rounded-xl border border-[#ebe6da] bg-[#faf7f0] text-xs font-medium text-[#1f2421] focus:outline-none focus:border-[#087653] disabled:opacity-50"
                   >
@@ -1068,7 +1074,7 @@ export function AiStudioHubPage({
                     : PERSONA_OPTIONS.find((p) => p.id === personaId)?.en}
                 </p>
                 <p className="text-[11px] font-mono-tabular text-[#6e7268]">
-                  {chatModel} {chatModel === 'gemini-4-hydrogen' ? `· thinking: ${thinkingDepth}` : ''}
+                  {chatModel} {chatModel !== 'gemini-2.5-flash-lite' ? `· thinking: ${thinkingDepth}` : ''}
                 </p>
               </div>
               {displayedMessages.length > 0 && (
@@ -1213,7 +1219,7 @@ export function AiStudioHubPage({
         </div>
       )}
 
-      {/* TAB 2: Audio Transcription (gemini-3.5-transcribe) */}
+      {/* TAB 2: Audio Transcription (gemini-2.5-flash) */}
       {activeTab === 'transcribe' && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
           <div className="lg:col-span-7 bg-white rounded-2xl border border-[#ebe6da] p-5 space-y-5">
@@ -1225,8 +1231,8 @@ export function AiStudioHubPage({
               </h2>
               <p className="text-xs text-[#6e7268] mt-0.5">
                 {lang === 'bn'
-                  ? 'মাইক্রোফোনে রেকর্ড করুন অথবা অডিও ফাইল আপলোড করে সরাসরি টেক্সটে রূপান্তর করুন (gemini-3.5-transcribe)।'
-                  : 'Record directly with your microphone or upload an audio clip to transcribe with Gemini 3.5 Transcribe.'}
+                  ? 'মাইক্রোফোনে রেকর্ড করুন অথবা অডিও ফাইল আপলোড করে সরাসরি টেক্সটে রূপান্তর করুন (gemini-2.5-flash)।'
+                  : 'Record directly with your microphone or upload an audio clip to transcribe with Gemini 2.5 Flash.'}
               </p>
             </div>
 
@@ -2005,7 +2011,7 @@ export function AiStudioHubPage({
             <button
               type="button"
               onClick={() => {
-                setChatModel('gemini-4-hydrogen');
+                setChatModel('gemini-2.5-flash');
                 setPersonaId('islamic-scholar');
                 setThinkingDepth('medium');
                 setCustomInstruction('');
@@ -2041,8 +2047,9 @@ export function AiStudioHubPage({
                 onChange={(e) => setChatModel(e.target.value as ChatModelId)}
                 className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-[#ebe6da] bg-[#faf7f0] text-xs font-medium text-[#1f2421]"
               >
-                <option value="gemini-4-hydrogen">Gemini 4 Hydrogen (Reasoning)</option>
-                <option value="gemini-3.1-flash-lite">Gemini 3.1 Flash Lite (Fast)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-2.5-pro">Gemini 2.5 Pro (Reasoning)</option>
+                <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash Lite (Fast)</option>
               </select>
             </label>
 
@@ -2050,7 +2057,7 @@ export function AiStudioHubPage({
               {lang === 'bn' ? 'চিন্তন গভীরতা (Thinking Depth)' : 'Thinking Depth'}
               <select
                 value={thinkingDepth}
-                disabled={chatModel !== 'gemini-4-hydrogen'}
+                disabled={chatModel === 'gemini-2.5-flash-lite'}
                 onChange={(e) => setThinkingDepth(e.target.value as ThinkingDepth)}
                 className="mt-1.5 w-full px-3 py-2.5 rounded-xl border border-[#ebe6da] bg-[#faf7f0] text-xs font-medium text-[#1f2421] disabled:opacity-50"
               >

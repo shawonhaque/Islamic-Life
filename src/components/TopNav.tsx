@@ -1,4 +1,5 @@
 import type { Language, SectionId } from '../types/islamic';
+import crescentMark from '../assets/crescent-moon.svg';
 
 interface TopNavProps {
   lang: Language;
@@ -11,6 +12,7 @@ const NAV_ITEMS: Array<{ id: SectionId; bn: string; en: string }> = [
   { id: 'home', bn: 'হোম', en: 'Home' },
   { id: 'quran', bn: 'কুরআন', en: 'Quran' },
   { id: 'namaz', bn: 'নামাজ', en: 'Namaz' },
+  { id: 'knowledge', bn: 'জ্ঞানকোষ', en: 'Knowledge' },
   { id: 'hadith', bn: 'হাদিস ও দোয়া', en: 'Hadith & Dua' },
   { id: 'prayer-time', bn: 'ইসলামিক টুলস', en: 'Tools' },
 ];
@@ -37,15 +39,14 @@ export function TopNav({ lang, activeSection, onNavigate, onToggleLanguage }: To
           onClick={() => onNavigate('home')}
           className="inline-flex items-center gap-2.5 text-xl font-bold tracking-tight text-[#087653] whitespace-nowrap shrink-0 cursor-pointer focus-visible:outline-2 focus-visible:outline-[#087653] rounded"
         >
-          <svg
+          <img
+            src={crescentMark}
+            alt=""
             aria-hidden="true"
-            viewBox="0 0 24 24"
-            className="w-6 h-6 text-[#087653] shrink-0"
-            fill="currentColor"
-          >
-            <path d="M12.5 2.2a9.8 9.8 0 1 0 8.9 13.9A8.2 8.2 0 0 1 12.5 2.2Z" />
-            <circle cx="17.8" cy="7.2" r="1.4" fill="#d5ad59" />
-          </svg>
+            width={24}
+            height={24}
+            className="w-6 h-6 rounded-md shrink-0"
+          />
           <span>Islamic Life</span>
         </button>
 

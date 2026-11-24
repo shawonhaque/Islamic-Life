@@ -62,7 +62,7 @@ export interface ChatThreadRecord {
   id: string;
   uid: string;
   title: string;
-  model: 'gemini-4-hydrogen' | 'gemini-3.1-flash-lite';
+  model: 'gemini-2.5-flash' | 'gemini-2.5-pro' | 'gemini-2.5-flash-lite';
   personaId: string;
   messageCount: number;
   createdAt?: Timestamp | null;

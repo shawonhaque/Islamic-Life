@@ -10,6 +10,7 @@ import { HajjUmrahPage } from './components/HajjUmrahPage';
 import { HomePage } from './components/HomePage';
 import { LocationSelectorModal } from './components/LocationSelectorModal';
 import { NamazPage } from './components/NamazPage';
+import { KnowledgeHubPage } from './components/KnowledgeHubPage';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { PrayerTimePage, QiblaPage } from './components/PrayerTimeQiblaPage';
 import { QuranPage } from './components/QuranPage';
@@ -18,7 +19,7 @@ import { SettingsPage } from './components/SettingsPage';
 import { SidebarNav } from './components/SidebarNav';
 import { TafsirHubPage } from './components/TafsirHubPage';
 import { TasbihPage, ZakatPage } from './components/TasbihZakatPage';
-import { TerrariumViewport } from './components/TerrariumViewport';
+import { EarthGlobe } from './components/EarthGlobe';
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
 import { SEED_DUAS, SEED_HADITHS } from './data/islamicSeed';
@@ -330,6 +331,8 @@ export default function App() {
             />
           )}
 
+          {activeSection === 'knowledge' && <KnowledgeHubPage lang={lang} />}
+
           {activeSection === 'search' && (
             <GlobalSearchPage
               lang={lang}
@@ -421,17 +424,15 @@ export default function App() {
             <div className="max-w-[1160px] mx-auto px-4 sm:px-6 lg:px-8 py-8">
               <div className="mb-5">
                 <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1f2421]">
-                  {lang === 'bn'
-                    ? 'ইন্টারেক্টিভ ৩ডি বোটানিক্যাল গ্লাস টেরারিয়াম'
-                    : 'Interactive 3D Botanical Glass Terrarium'}
+                  {lang === 'bn' ? 'পৃথিবী — ইন্টারেক্টিভ ৩ডি গ্লোব' : 'Earth — Interactive 3D Globe'}
                 </h1>
                 <p className="text-[#6e7268] mt-1">
                   {lang === 'bn'
-                    ? 'মাউস দিয়ে ঘোরান ও জুম করুন। নিচের ডক থেকে নামাজের ওয়াক্ত অনুযায়ী আলো ও আবহাওয়া পরিবর্তন করুন।'
-                    : 'Drag to orbit and scroll to zoom. Adjust prayer-time lighting, weather modes, and camera angles from the bottom dock.'}
+                    ? 'ড্র্যাগ করে পৃথিবী ঘোরান, আপনার শহরের অবস্থান দেখুন এবং পূর্ণ স্ক্রিনে উপভোগ করুন।'
+                    : 'Drag to rotate the planet, locate your city, and switch to fullscreen.'}
                 </p>
               </div>
-              <TerrariumViewport
+              <EarthGlobe
                 lang={lang}
                 city={city}
                 fullscreen={fullscreenTerrarium}

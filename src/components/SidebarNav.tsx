@@ -8,6 +8,7 @@ import {
   Coins,
   Compass,
   Languages,
+  Library,
   LogIn,
   LogOut,
   Menu,
@@ -25,6 +26,7 @@ import {
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import type { Language, SectionId } from '../types/islamic';
+import crescentMark from '../assets/crescent-moon.svg';
 
 interface SidebarNavProps {
   lang: Language;
@@ -49,6 +51,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'tafsir', bn: 'তাফসির হাব (১৭ সংস্করণ)', en: 'Tafsir Hub', icon: ScrollText },
   { id: 'arabic-learning', bn: 'আরবি ও কুরআন শিক্ষা', en: 'Arabic & Quran Academy', icon: Languages },
   { id: 'namaz', bn: 'নামাজ শিক্ষা', en: 'Namaz Guide', icon: Sparkles },
+  { id: 'knowledge', bn: 'ইসলামিক জ্ঞানকোষ', en: 'Islamic Knowledge', icon: Library },
   { id: 'prayer-time', bn: 'নামাজের সময় ও আজান', en: 'Prayer & Adhan', icon: Clock },
   { id: 'qibla', bn: 'কিবলা ও মসজিদ', en: 'Qibla & Mosques', icon: Compass },
   { id: 'hadith', bn: 'হাদিস ও দোয়া', en: 'Hadith & Duas', icon: MoonStar },
@@ -58,7 +61,7 @@ const SIDEBAR_ITEMS: SidebarItem[] = [
   { id: 'calendar', bn: 'হিজরি তারিখ', en: 'Islamic dates', icon: CalendarDays },
   { id: 'ramadan', bn: 'সেহরি, ইফতার ও রমজান', en: 'Ramadan & Sehri', icon: Clock },
   { id: 'zakat', bn: 'যাকাত হিসাব', en: 'Zakat', icon: Coins },
-  { id: 'terrarium', bn: '৩ডি টেরারিয়াম', en: '3D Sanctuary', icon: Trees },
+  { id: 'terrarium', bn: '৩ডি পৃথিবী গ্লোব', en: '3D Earth Globe', icon: Trees },
   { id: 'ai-studio', bn: 'এআই ও ক্লাউড স্টুডিও', en: 'AI & Cloud Hub', icon: Bot },
   { id: 'settings', bn: 'সেটিংস ও অ্যাকাউন্ট', en: 'Settings', icon: SlidersHorizontal },
 ];
@@ -123,17 +126,14 @@ export function SidebarNav({
             onClick={() => handleSelect('home')}
             className="flex items-center gap-3 text-left w-full cursor-pointer group"
           >
-            <div className="w-10 h-10 rounded-xl bg-[#0f3d2e] border border-[#b58328]/50 flex items-center justify-center shrink-0 shadow-xs">
-              <svg
-                aria-hidden="true"
-                viewBox="0 0 24 24"
-                className="w-5 h-5 text-[#d4a84f]"
-                fill="currentColor"
-              >
-                <path d="M12.5 2.5a9.5 9.5 0 1 0 8.7 13.3 7.8 7.8 0 0 1-8.7-13.3Z" />
-                <circle cx="17.5" cy="7.2" r="1.4" fill="#faf7f0" />
-              </svg>
-            </div>
+            <img
+              src={crescentMark}
+              alt=""
+              aria-hidden="true"
+              width={40}
+              height={40}
+              className="w-10 h-10 rounded-xl shrink-0 shadow-xs"
+            />
             <div className="min-w-0">
               <p className="text-[15px] font-bold text-[#1f2421] leading-tight truncate">
                 Islamic Life

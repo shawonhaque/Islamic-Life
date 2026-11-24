@@ -42,3 +42,41 @@ export async function safeReadJson<T = unknown>(
 
   return parsed as T;
 }
+
+export const API_UNAVAILABLE_MESSAGE_BN =
+  'এই সুবিধাটি এআই সার্ভারে চলে, যা এই স্ট্যাটিক ডিপ্লয়মেন্টে চালু নেই। বাকি সব বিভাগ (কুরআন, নামাজ, হাদিস, জ্ঞানকোষ) সম্পূর্ণ কাজ করে।';
+
+export class ApiUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiUnavailableError';
+  }
+}
+
+/**
+ * Calls a JSON API endpoint that only exists when the express server is
+ * running. On the static deploy those paths answer with the SPA shell and
+ * HTTP 200, which used to surface as "the endpoint returned an HTML page
+ * instead of JSON". Detecting that here lets callers fall back to bundled
+ * data or show a clear "server-only feature" message.
+ */
+export async function postJson<T = unknown>(
+  url: string,
+  body: unknown,
+  fallbackError = 'Request failed.'
+): Promise<T> {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  const contentType = res.headers.get('content-type') ?? '';
+  if (!contentType.includes('application/json')) {
+    throw new ApiUnavailableError(
+      'This feature needs the AI server, which is not running on this deployment.'
+    );
+  }
+
+  return safeReadJson<T>(res, fallbackError);
+}

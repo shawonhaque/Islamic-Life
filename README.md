@@ -16,16 +16,38 @@
 
 ---
 
-## What is this
+## About
 
-Islamic Life is a single-page web app for daily Islamic practice, written in
-Bengali with an English switch. It runs entirely in the browser: the whole
-Quran, prayer times computed from your coordinates, qibla direction, a tasbih
-counter, zakat calculator, hijri calendar, and a 3D globe — no account needed.
+**Islamic Life** is a Bengali-first Islamic companion web app. It puts the
+whole Quran, prayer times, qibla, tafsir, hadith, zakat, and a 3D globe in one
+page that works offline once loaded — no account, no install.
+
+- **Live site:** <https://shawonhaque.github.io/Islamic-Life/>
+- **Language:** Bengali, with an English switch
+- **Stack:** React 19 · TypeScript · Vite 8 · Tailwind CSS 4
+- **Hosting:** GitHub Pages, static build, no backend in production
+- **License:** personal project (see [License](#license))
+
+**Topics:** `islam` `quran` `bengali` `bangla` `islamic-app` `prayer-times`
+`qibla` `tafsir` `hadith` `zakat` `hijri-calendar` `react` `typescript` `vite`
+`tailwindcss` `github-pages` `threejs` `firebase`
+
+### What it does
+
+It runs entirely in the browser: the whole Quran, prayer times computed from
+your coordinates, qibla direction, a tasbih counter, zakat calculator, hijri
+calendar, and a 3D globe — no account needed.
 
 Google sign-in adds optional cloud backup so settings, goals, and reading
 progress follow you across devices. Without it, everything stays in
 `localStorage` and the JSON export works offline.
+
+## Contents
+
+[About](#about) · [Features](#features) · [Getting started](#getting-started) ·
+[Deployment](#deployment) · [Project layout](#project-layout) ·
+[Tech stack](#tech-stack) · [Contributors](#notes-for-contributors) ·
+[License](#license)
 
 ## Features
 
@@ -58,7 +80,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs `server.ts` on [<http://localhost:3000>](https://shawonhaque.github.io/Islamic-Life/) and proxies Vite
+The dev server runs `server.ts` on <http://localhost:3000> and proxies Vite
 through it, so the AI endpoints and `/api/content` work locally.
 
 For AI features, copy `.env.example` to `.env.local` and set `GEMINI_API_KEY`.

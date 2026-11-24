@@ -41,6 +41,7 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [openArticle, setOpenArticle] = useState<string | null>(null);
   const [playingVideo, setPlayingVideo] = useState<string | null>(null);
+  const [view, setView] = useState<'articles' | 'videos'>('articles');
 
   const term = query.trim().toLowerCase();
 
@@ -90,6 +91,44 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
         </p>
       </header>
 
+      {/* Articles / lectures switch. The lecture grid used to sit below 32
+          articles, three screens down, so it looked missing. */}
+      <div
+        role="tablist"
+        className="mb-5 inline-flex gap-1 p-1 rounded-xl bg-[#eef5f0] border border-[#dce7e0]"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'articles'}
+          data-testid="knowledge-tab-articles"
+          onClick={() => setView('articles')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+            view === 'articles'
+              ? 'bg-white text-[#087653] shadow-sm'
+              : 'text-[#5a7066] hover:text-[#183027]'
+          }`}
+        >
+          {lang === 'bn' ? `নিবন্ধ (${totalArticles})` : `Articles (${totalArticles})`}
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={view === 'videos'}
+          data-testid="knowledge-tab-videos"
+          onClick={() => setView('videos')}
+          className={`px-4 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer ${
+            view === 'videos'
+              ? 'bg-white text-[#087653] shadow-sm'
+              : 'text-[#5a7066] hover:text-[#183027]'
+          }`}
+        >
+          {lang === 'bn'
+            ? `অডিও ও ভিডিও লেকচার (${LECTURE_VIDEOS.length})`
+            : `Audio & Video Lectures (${LECTURE_VIDEOS.length})`}
+        </button>
+      </div>
+
       {/* Search + category filter */}
       <div className="bg-white rounded-2xl border border-[#dce7e0] p-4 sm:p-5 space-y-3">
         <div className="relative">
@@ -118,7 +157,7 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
+        <div className={`flex flex-wrap gap-1.5 ${view === 'videos' ? 'hidden' : ''}`}>
           <button
             type="button"
             data-testid="knowledge-cat-all"
@@ -155,6 +194,7 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
       </div>
 
       {/* Articles */}
+      {view === 'articles' && (
       <div className="mt-6 space-y-6">
         {categories.length === 0 && (
           <p className="text-sm text-[#5a7066] bg-white border border-[#dce7e0] rounded-2xl p-6 text-center">
@@ -238,11 +278,13 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
           );
         })}
       </div>
+      )}
 
       {/* Video lectures */}
+      {view === 'videos' && (
       <section
         data-testid="knowledge-videos"
-        className="mt-8 bg-white rounded-2xl border border-[#dce7e0] p-5 sm:p-6"
+        className="mt-6 bg-white rounded-2xl border border-[#dce7e0] p-5 sm:p-6"
       >
         <div className="flex items-center gap-2.5 pb-4 border-b border-[#eef5f0]">
           <Play className="w-5 h-5 text-[#087653]" />
@@ -312,6 +354,7 @@ export function KnowledgeHubPage({ lang }: KnowledgeHubPageProps) {
           </div>
         )}
       </section>
+      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import{$ as e,F as t,K as n,M as r,P as i,_ as a,b as o,ft as s,g as c,nt as ee,pt as l,q as te,rt as ne,s as u,st as re,v as d,w as f,y as ie}from"./index-CxNB1EBA.js";import{t as ae}from"./earth-rPz3ZJqk.js";var p=l(s(),1),m=`https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir`;function h(e){return e.replace(/<br\s*\/?>/gi,`
+import{$ as e,F as t,K as n,M as r,P as i,_ as a,b as o,ft as s,g as c,nt as ee,pt as l,q as te,rt as ne,s as u,st as re,v as d,w as f,y as ie}from"./index-D1qzGr1r.js";import{t as ae}from"./earth-kC8wAMkH.js";var p=l(s(),1),m=`https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir`;function h(e){return e.replace(/<br\s*\/?>/gi,`
 `).replace(/<\/(p|div|h[1-6]|li)>/gi,`
 
 `).replace(/<[^>]+>/g,``).replace(/&nbsp;/g,` `).replace(/&amp;/g,`&`).replace(/&lt;/g,`<`).replace(/&gt;/g,`>`).replace(/&quot;/g,`"`).replace(/\n{3,}/g,`

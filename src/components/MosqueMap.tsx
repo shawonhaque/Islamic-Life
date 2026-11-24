@@ -4,15 +4,16 @@ import 'leaflet/dist/leaflet.css';
 import 'leaflet.markercluster';
 import 'leaflet.markercluster/dist/MarkerCluster.css';
 import 'leaflet.markercluster/dist/MarkerCluster.Default.css';
-import type { Mosque } from '../utils/mosqueData';
+import type { LatLngBounds, Mosque } from '../utils/mosqueData';
 
 interface MosqueMapProps {
   center: { lat: number; lng: number };
+  zoom: number;
   userPosition: { lat: number; lng: number } | null;
   mosques: Mosque[];
   focusId: string | null;
   focusToken: number;
-  onBoundsChanged: () => void;
+  onBoundsChanged: (bounds: LatLngBounds) => void;
   onSelect: (id: string) => void;
   onReady: (api: MosqueMapApi) => void;
 }
@@ -22,6 +23,8 @@ export interface MosqueMapApi {
   openPopup: (id: string) => void;
   recenter: () => void;
   getCenter: () => { lat: number; lng: number };
+  getBounds: () => LatLngBounds;
+  setView: (lat: number, lng: number, zoom: number) => void;
 }
 
 const CLUSTER_STYLE = `
@@ -67,6 +70,7 @@ function pinIcon(active: boolean): L.DivIcon {
 
 export function MosqueMap({
   center,
+  zoom,
   userPosition,
   mosques,
   focusId,
@@ -81,7 +85,6 @@ export function MosqueMap({
   const userMarkerRef = useRef<L.Marker | null>(null);
   const markersRef = useRef<Map<string, L.Marker>>(new Map());
   const skipNextMoveRef = useRef(false);
-  const hasFittedRef = useRef(false);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -92,7 +95,7 @@ export function MosqueMap({
 
     const map = L.map(containerRef.current, {
       center: [center.lat, center.lng],
-      zoom: 13,
+      zoom,
       zoomControl: false,
       attributionControl: true,
     });
@@ -121,12 +124,22 @@ export function MosqueMap({
     clusterRef.current = clusters;
     map.addLayer(clusters);
 
+    const readBounds = (): LatLngBounds => {
+      const b = map.getBounds();
+      return {
+        south: b.getSouth(),
+        west: b.getWest(),
+        north: b.getNorth(),
+        east: b.getEast(),
+      };
+    };
+
     const notifyBounds = () => {
       if (skipNextMoveRef.current) {
         skipNextMoveRef.current = false;
         return;
       }
-      onBoundsChanged();
+      onBoundsChanged(readBounds());
     };
     map.on('moveend', notifyBounds);
 
@@ -151,6 +164,11 @@ export function MosqueMap({
         const c = map.getCenter();
         return { lat: c.lat, lng: c.lng };
       },
+      getBounds: readBounds,
+      setView: (lat, lng, zoom) => {
+        skipNextMoveRef.current = true;
+        map.setView([lat, lng], zoom);
+      },
     });
 
     const observer = new ResizeObserver(() => map.invalidateSize());
@@ -169,6 +187,7 @@ export function MosqueMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    skipNextMoveRef.current = true;
     map.setView([center.lat, center.lng], map.getZoom());
   }, [center.lat, center.lng]);
 
@@ -206,15 +225,6 @@ export function MosqueMap({
       clusters.addLayer(marker);
     });
 
-    // A phone-sized viewport at the default zoom only covers a few kilometres,
-    // so markers placed across a city would sit off-screen with nothing visible.
-    // Fit the group once, but never fight the user after they start panning.
-    if (mosques.length > 0 && !hasFittedRef.current) {
-      const bounds = L.latLngBounds(mosques.map((m) => [m.lat, m.lng] as [number, number]));
-      skipNextMoveRef.current = true;
-      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
-      hasFittedRef.current = true;
-    }
   }, [mosques, onSelect]);
 
   // Highlighting is applied by swapping the icon only. Rebuilding the markers on

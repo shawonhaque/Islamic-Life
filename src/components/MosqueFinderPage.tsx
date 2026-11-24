@@ -3,12 +3,15 @@ import { Search, X, Navigation, MapPin, Phone, Clock, Plus, Loader2, LocateFixed
 import { MosqueMap, type MosqueMapApi } from './MosqueMap';
 import {
   applyLocalInfo,
-  fetchMosquesNear,
+  boundsContains,
+  boundsTooLarge,
+  fetchMosquesInBounds,
   googleDirectionsUrl,
   haversineKm,
   readMosqueInfo,
   saveMosqueInfo,
   SEED_MOSQUES_FOR_TEST,
+  type LatLngBounds,
   type Mosque,
   type MosqueInfoPatch,
 } from '../utils/mosqueData';
@@ -20,7 +23,7 @@ interface MosqueFinderPageProps {
 type FilterId = 'all' | 'jummah' | 'phone';
 
 const DEFAULT_CENTER = { lat: 23.9999, lng: 90.4203 };
-const SEARCH_RADIUS_M = 5000;
+const DEFAULT_ZOOM = 13;
 
 export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
   const [query, setQuery] = useState('');
@@ -29,8 +32,10 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
   const [info, setInfo] = useState<Record<string, MosqueInfoPatch>>(() => readMosqueInfo());
   const [userPosition, setUserPosition] = useState<{ lat: number; lng: number } | null>(null);
   const [center, setCenter] = useState(DEFAULT_CENTER);
+  const [bounds, setBounds] = useState<LatLngBounds | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [zoomHint, setZoomHint] = useState(false);
   const [focusId, setFocusId] = useState<string | null>(null);
   const [focusToken, setFocusToken] = useState(0);
   const [boundsDirty, setBoundsDirty] = useState(false);
@@ -40,30 +45,45 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
 
   const mapApiRef = useRef<MosqueMapApi | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const userPositionRef = useRef<{ lat: number; lng: number } | null>(null);
+  const appliedPositionRef = useRef<{ lat: number; lng: number } | null>(null);
 
-  const load = useCallback(async (lat: number, lng: number) => {
+  const load = useCallback(async (next: LatLngBounds) => {
+    if (boundsTooLarge(next)) {
+      setZoomHint(true);
+      setLoading(false);
+      setBoundsDirty(false);
+      return;
+    }
+
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
     setError(null);
+    setZoomHint(false);
+    setBounds(next);
     try {
-      const found = await fetchMosquesNear(lat, lng, SEARCH_RADIUS_M, controller.signal);
+      const { mosques: found, reached } = await fetchMosquesInBounds(next, controller.signal);
       setOsmMosques(found);
       setBoundsDirty(false);
       if (found.length === 0) {
         setError(
-          lang === 'bn'
-            ? 'এই এলাকায় OpenStreetMap-এ মসজিদ পাওয়া যায়নি — নিচে সংরক্ষিত তালিকা দেখানো হচ্ছে।'
-            : 'No mosques returned by OpenStreetMap here — showing the saved list instead.',
+          reached
+            ? lang === 'bn'
+              ? 'এই এলাকায় OpenStreetMap-এ মসজিদ পাওয়া যায়নি — ম্যাপ সরিয়ে অন্য জায়গা দেখুন।'
+              : 'OpenStreetMap has no mosques mapped here — pan the map to another area.'
+            : lang === 'bn'
+              ? 'OpenStreetMap সার্ভার এখন ব্যস্ত — কিছুক্ষণ পরে “এই এলাকায় খুঁজুন” চাপুন।'
+              : 'OpenStreetMap is busy right now — try “Search this area” again in a moment.',
         );
       }
     } catch {
       if (!controller.signal.aborted) {
         setError(
           lang === 'bn'
-            ? 'OpenStreetMap-এ সংযোগ ব্যর্থ হয়েছে — সংরক্ষিত তালিকা দেখানো হচ্ছে।'
-            : 'Could not reach OpenStreetMap — showing the saved list instead.',
+            ? 'OpenStreetMap-এ সংযোগ ব্যর্থ হয়েছে — আবার চেষ্টা করুন।'
+            : 'Could not reach OpenStreetMap — try again.',
         );
       }
     } finally {
@@ -77,7 +97,6 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
       if (settled) return;
       settled = true;
       setCenter(DEFAULT_CENTER);
-      void load(DEFAULT_CENTER.lat, DEFAULT_CENTER.lng);
     };
 
     if (!('geolocation' in navigator)) {
@@ -92,9 +111,9 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
         settled = true;
         clearTimeout(timer);
         const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        userPositionRef.current = next;
         setUserPosition(next);
         setCenter(next);
-        void load(next.lat, next.lng);
       },
       () => {
         clearTimeout(timer);
@@ -111,14 +130,26 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    const api = mapApiRef.current;
+    if (!userPosition || !api) return;
+    if (appliedPositionRef.current === userPosition) return;
+    appliedPositionRef.current = userPosition;
+    api.setView(userPosition.lat, userPosition.lng, DEFAULT_ZOOM);
+    void load(api.getBounds());
+  }, [userPosition, load]);
+
   const allMosques = useMemo(() => {
-    const merged = [...SEED_MOSQUES_FOR_TEST, ...osmMosques].map((m) => applyLocalInfo(m, info));
+    const seeds = bounds
+      ? SEED_MOSQUES_FOR_TEST.filter((m) => boundsContains(bounds, m.lat, m.lng))
+      : [];
+    const merged = [...seeds, ...osmMosques].map((m) => applyLocalInfo(m, info));
     const withDistance = merged.map((m) => ({
       mosque: m,
       km: haversineKm(center.lat, center.lng, m.lat, m.lng),
     }));
     return withDistance.sort((a, b) => a.km - b.km);
-  }, [osmMosques, info, center]);
+  }, [osmMosques, info, center, bounds]);
 
   const visible = useMemo(() => {
     const term = query.trim().toLowerCase();
@@ -227,11 +258,22 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
             </div>
           )}
 
-          {error && !loading && (
-            <p className="text-xs text-[#8a6d3b] bg-[#fdf8ee] border border-[#f0e2c8] rounded-xl px-3 py-2">
-              {error}
-            </p>
-          )}
+            {zoomHint && (
+              <p
+                data-testid="mosque-zoom-hint"
+                className="text-xs text-[#8a6d3b] bg-[#fdf8ee] border border-[#f0e2c8] rounded-xl px-3 py-2"
+              >
+                {lang === 'bn'
+                  ? 'খুব বড় এলাকা। জুম করে ছোট এলাকা দেখুন, তারপর “এই এলাকায় খুঁজুন” চাপুন।'
+                  : 'That area is too large. Zoom in, then press “Search this area”.'}
+              </p>
+            )}
+
+            {error && !loading && (
+              <p className="text-xs text-[#8a6d3b] bg-[#fdf8ee] border border-[#f0e2c8] rounded-xl px-3 py-2">
+                {error}
+              </p>
+            )}
 
           {!loading && visible.length === 0 && (
             <p className="text-sm text-[#5a7066] text-center py-8">
@@ -318,14 +360,25 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
       <div className="relative flex-1 min-w-0 min-h-[320px] rounded-2xl overflow-hidden border border-[#dce7e0] order-1 lg:order-2">
         <MosqueMap
           center={center}
+          zoom={DEFAULT_ZOOM}
           userPosition={userPosition}
           mosques={visibleMosques}
           focusId={focusId}
           focusToken={focusToken}
-          onBoundsChanged={() => setBoundsDirty(true)}
+          onBoundsChanged={(next) => {
+            setBoundsDirty(true);
+            setZoomHint(boundsTooLarge(next));
+          }}
           onSelect={handleSelect}
           onReady={(api) => {
             mapApiRef.current = api;
+            // The map is the source of truth for what to query, so the first
+            // fetch waits for it instead of guessing from a fixed radius.
+            if (userPositionRef.current) {
+              appliedPositionRef.current = userPositionRef.current;
+              api.setView(userPositionRef.current.lat, userPositionRef.current.lng, DEFAULT_ZOOM);
+            }
+            void load(api.getBounds());
           }}
         />
 
@@ -334,10 +387,10 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
             type="button"
             data-testid="mosque-search-area"
             onClick={() => {
-              const next = mapApiRef.current?.getCenter();
-              if (!next) return;
-              setCenter(next);
-              void load(next.lat, next.lng);
+              const api = mapApiRef.current;
+              if (!api) return;
+              setCenter(api.getCenter());
+              void load(api.getBounds());
             }}
             className="absolute top-3 left-1/2 -translate-x-1/2 z-[500] px-4 py-2 rounded-full bg-white text-[#183027] text-sm font-semibold shadow-md border border-[#dce7e0] hover:bg-[#f7faf8] cursor-pointer"
           >

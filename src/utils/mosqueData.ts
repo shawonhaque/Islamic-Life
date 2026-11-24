@@ -119,23 +119,53 @@ interface OverpassElement {
   tags?: Record<string, string>;
 }
 
+export interface LatLngBounds {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+}
+
+// Only planet-wide mirrors belong here. Regional extracts (overpass.osm.ch is
+// Switzerland-only) answer 200 with an empty set for the rest of the world,
+// which reads as "no mosques here" and is worse than no answer at all.
 const OVERPASS_ENDPOINTS = [
-  'https://overpass.kumi.systems/api/interpreter',
   'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];
 
-// Public Overpass instances routinely answer 502 "at capacity" or stall for
-// minutes. Bound each attempt so the sidebar falls back to the seed list fast.
-const OVERPASS_TIMEOUT_MS = 12_000;
+// Public Overpass instances are load balanced and drift between "fast" and
+// "502 at capacity" from minute to minute, so the mirrors are raced instead of
+// tried in turn: whichever answers first wins and the rest are aborted.
+const OVERPASS_TIMEOUT_MS = 25_000;
+const MAX_ELEMENTS = 1500;
 
-function buildOverpassQuery(lat: number, lng: number, radiusM: number): string {
-  return `[out:json][timeout:20];
+// Overpass rejects or times out on continent-sized bounding boxes. Roughly a
+// 1-degree span is a large metro area and still answers in seconds.
+export const MAX_BOUNDS_SPAN_DEG = 1.2;
+
+export function boundsTooLarge(b: LatLngBounds): boolean {
+  return b.north - b.south > MAX_BOUNDS_SPAN_DEG || b.east - b.west > MAX_BOUNDS_SPAN_DEG;
+}
+
+export function boundsContains(b: LatLngBounds, lat: number, lng: number): boolean {
+  return lat >= b.south && lat <= b.north && lng >= b.west && lng <= b.east;
+}
+
+// `religion=muslim` alone misses a lot of the world: many mosques are mapped
+// only as `building=mosque`. Query both so coverage holds outside Bangladesh.
+function buildOverpassQuery(b: LatLngBounds): string {
+  const bbox = `${b.south},${b.west},${b.north},${b.east}`;
+  return `[out:json][timeout:25];
 (
-  node["amenity"="place_of_worship"]["religion"="muslim"](around:${radiusM},${lat},${lng});
-  way["amenity"="place_of_worship"]["religion"="muslim"](around:${radiusM},${lat},${lng});
+  node["amenity"="place_of_worship"]["religion"="muslim"](${bbox});
+  way["amenity"="place_of_worship"]["religion"="muslim"](${bbox});
+  node["building"="mosque"](${bbox});
+  way["building"="mosque"](${bbox});
 );
-out center tags;`;
+out center ${MAX_ELEMENTS};`;
 }
 
 function toMosque(el: OverpassElement): Mosque | null {
@@ -144,8 +174,9 @@ function toMosque(el: OverpassElement): Mosque | null {
   if (typeof lat !== 'number' || typeof lng !== 'number') return null;
 
   const tags = el.tags ?? {};
-  const name = tags.name || tags['name:bn'] || tags['name:en'];
-  if (!name) return null;
+  // Unnamed mosque buildings are common in OSM and still worth showing, so fall
+  // back to a generic label instead of dropping them.
+  const name = tags.name || tags['name:bn'] || tags['name:en'] || 'মসজিদ';
 
   const street = [tags['addr:street'], tags['addr:suburb'], tags['addr:city']]
     .filter(Boolean)
@@ -162,41 +193,80 @@ function toMosque(el: OverpassElement): Mosque | null {
   };
 }
 
-export async function fetchMosquesNear(
-  lat: number,
-  lng: number,
-  radiusM = 5000,
-  signal?: AbortSignal,
+async function queryEndpoint(
+  endpoint: string,
+  body: string,
+  signal: AbortSignal,
 ): Promise<Mosque[]> {
-  const body = `data=${encodeURIComponent(buildOverpassQuery(lat, lng, radiusM))}`;
+  const attempt = new AbortController();
+  const timer = setTimeout(() => attempt.abort(), OVERPASS_TIMEOUT_MS);
+  const relay = () => attempt.abort();
+  signal.addEventListener('abort', relay);
 
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-
-    const attempt = new AbortController();
-    const timer = setTimeout(() => attempt.abort(), OVERPASS_TIMEOUT_MS);
-    const relay = () => attempt.abort();
-    signal?.addEventListener('abort', relay);
-
-    try {
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body,
-        signal: attempt.signal,
-      });
-      if (!res.ok) continue;
-      const json: { elements?: OverpassElement[] } = await res.json();
-      const mosques = (json.elements ?? []).map(toMosque).filter((m): m is Mosque => m !== null);
-      if (mosques.length > 0) return mosques;
-    } catch {
-      // Timeout, network error or an at-capacity 502: try the next mirror.
-    } finally {
-      clearTimeout(timer);
-      signal?.removeEventListener('abort', relay);
-    }
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+      signal: attempt.signal,
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json: { elements?: OverpassElement[] } = await res.json();
+    return (json.elements ?? []).map(toMosque).filter((m): m is Mosque => m !== null);
+  } finally {
+    clearTimeout(timer);
+    signal.removeEventListener('abort', relay);
   }
-  return [];
+}
+
+export interface BoundsResult {
+  mosques: Mosque[];
+  // True when at least one mirror answered, even if it had nothing to report.
+  reached: boolean;
+}
+
+export async function fetchMosquesInBounds(
+  bounds: LatLngBounds,
+  signal?: AbortSignal,
+): Promise<BoundsResult> {
+  const body = `data=${encodeURIComponent(buildOverpassQuery(bounds))}`;
+  const racers = new AbortController();
+  const relay = () => racers.abort();
+  signal?.addEventListener('abort', relay);
+
+  try {
+    return await new Promise<BoundsResult>((resolve, reject) => {
+      let pending = OVERPASS_ENDPOINTS.length;
+      let done = false;
+      // A mirror that answers "nothing here" is still an answer, but an empty
+      // reply is often a partial outage, so wait for a richer one first.
+      let emptyAnswer = false;
+
+      const finish = (result: BoundsResult) => {
+        if (done) return;
+        done = true;
+        racers.abort();
+        resolve(result);
+      };
+
+      OVERPASS_ENDPOINTS.forEach((endpoint) => {
+        queryEndpoint(endpoint, body, racers.signal).then(
+          (mosques) => {
+            if (mosques.length > 0) return finish({ mosques, reached: true });
+            emptyAnswer = true;
+            if (--pending === 0) finish({ mosques: [], reached: true });
+          },
+          () => {
+            if (--pending > 0) return;
+            if (signal?.aborted) reject(new DOMException('Aborted', 'AbortError'));
+            else finish({ mosques: [], reached: emptyAnswer });
+          },
+        );
+      });
+    });
+  } finally {
+    signal?.removeEventListener('abort', relay);
+  }
 }
 
 export function haversineKm(aLat: number, aLng: number, bLat: number, bLng: number): number {

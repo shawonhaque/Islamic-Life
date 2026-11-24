@@ -7,7 +7,14 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth';
+import {
+  getRedirectResult,
+  onAuthStateChanged,
+  signInWithPopup,
+  signInWithRedirect,
+  signOut,
+  type User,
+} from 'firebase/auth';
 import {
   collection,
   deleteDoc,
@@ -94,6 +101,7 @@ interface AuthContextValue {
   authReady: boolean;
   authBusy: boolean;
   authError: string | null;
+  clearAuthError: () => void;
   profile: CloudUserProfile | null;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
@@ -165,6 +173,56 @@ function clampStr(val: string | undefined | null, maxLen: number): string {
   return (val ?? '').trim().slice(0, maxLen);
 }
 
+/** Turns a Firebase auth error code into something a visitor can act on. */
+function describeAuthError(err: unknown, lang: 'bn' | 'en' = 'bn'): string {
+  const code =
+    typeof err === 'object' && err !== null && 'code' in err
+      ? String((err as { code?: unknown }).code ?? '')
+      : '';
+
+  const bn: Record<string, string> = {
+    'auth/popup-closed-by-user': 'সাইন ইন উইন্ডো বন্ধ হয়ে গেছে। আবার চেষ্টা করুন।',
+    'auth/cancelled-popup-request': 'সাইন ইন বাতিল হয়েছে। আবার চেষ্টা করুন।',
+    'auth/popup-blocked':
+      'ব্রাউজার সাইন ইন উইন্ডো ব্লক করেছে। আমরা রিডাইরেক্ট পদ্ধতিতে চেষ্টা করছি।',
+    'auth/unauthorized-domain':
+      'এই ডোমেইনটি Firebase-এ অনুমোদিত নয়। Firebase Console → Authentication → Settings → Authorized domains-এ shawonhaque.github.io যোগ করুন।',
+    'auth/operation-not-allowed':
+      'Google সাইন ইন প্রোভাইডার চালু নেই। Firebase Console → Authentication → Sign-in method-এ Google চালু করুন।',
+    'auth/network-request-failed': 'নেটওয়ার্ক সমস্যা। ইন্টারনেট সংযোগ পরীক্ষা করুন।',
+    'auth/too-many-requests': 'অনেকবার চেষ্টা হয়েছে। কিছুক্ষণ পর আবার চেষ্টা করুন।',
+    'auth/internal-error': 'সাইন ইন সার্ভারে সমস্যা হয়েছে। আবার চেষ্টা করুন।',
+    'auth/account-exists-with-different-credential':
+      'এই ইমেইল অন্য পদ্ধতিতে নিবন্ধিত। সেই পদ্ধতিতে সাইন ইন করুন।',
+    'auth/user-disabled': 'এই অ্যাকাউন্টটি বন্ধ করা হয়েছে।',
+  };
+
+  const en: Record<string, string> = {
+    'auth/popup-closed-by-user': 'The sign-in window was closed. Please try again.',
+    'auth/cancelled-popup-request': 'Sign-in was cancelled. Please try again.',
+    'auth/popup-blocked':
+      'The browser blocked the sign-in window. Switching to redirect sign-in.',
+    'auth/unauthorized-domain':
+      'This domain is not authorized in Firebase. Add shawonhaque.github.io under Firebase Console → Authentication → Settings → Authorized domains.',
+    'auth/operation-not-allowed':
+      'Google sign-in is disabled. Enable Google under Firebase Console → Authentication → Sign-in method.',
+    'auth/network-request-failed': 'Network problem. Check your internet connection.',
+    'auth/too-many-requests': 'Too many attempts. Please wait a moment and retry.',
+    'auth/internal-error': 'The sign-in service failed. Please try again.',
+    'auth/account-exists-with-different-credential':
+      'This email is registered with another method. Sign in with that method.',
+    'auth/user-disabled': 'This account has been disabled.',
+  };
+
+  const table = lang === 'bn' ? bn : en;
+  if (code && table[code]) return table[code];
+
+  const fallback = err instanceof Error ? err.message : String(err ?? '');
+  return lang === 'bn'
+    ? `সাইন ইন সম্পন্ন হয়নি। ${fallback}`
+    : `Sign-in did not complete. ${fallback}`;
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
@@ -229,6 +287,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Completes a redirect-based sign-in and reports failures that would
+  // otherwise vanish silently after the page reloads.
+  useEffect(() => {
+    let cancelled = false;
+    void getRedirectResult(auth)
+      .then(async (result) => {
+        if (cancelled || !result?.user) return;
+        idTokenRef.current = await result.user.getIdToken();
+        if (result.user.emailVerified) {
+          await ensureUserDocuments(result.user);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setAuthError(describeAuthError(err));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ensureUserDocuments]);
+
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
@@ -282,8 +360,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await ensureUserDocuments(result.user);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Google sign-in failed.';
-      setAuthError(msg);
+      const code =
+        typeof err === 'object' && err !== null && 'code' in err
+          ? String((err as { code?: unknown }).code ?? '')
+          : '';
+
+      // Popups are blocked by some mobile browsers and by in-app webviews, and
+      // an unauthorized domain also only fails at this point. Redirect sign-in
+      // survives both, so fall back rather than leaving the user stuck.
+      const redirectCodes = new Set([
+        'auth/popup-blocked',
+        'auth/popup-closed-by-user',
+        'auth/cancelled-popup-request',
+        'auth/operation-not-supported-in-this-environment',
+        'auth/web-storage-unsupported',
+      ]);
+
+      if (redirectCodes.has(code)) {
+        try {
+          await signInWithRedirect(auth, googleAuthProvider);
+          return;
+        } catch (redirectErr) {
+          setAuthError(describeAuthError(redirectErr));
+          return;
+        }
+      }
+
+      setAuthError(describeAuthError(err));
     } finally {
       setAuthBusy(false);
     }
@@ -303,6 +406,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuthBusy(false);
     }
   }, []);
+
+  const clearAuthError = useCallback(() => setAuthError(null), []);
 
   const getMemoryIdToken = useCallback(async () => {
     if (!auth.currentUser) return null;
@@ -767,6 +872,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         authReady,
         authBusy,
         authError,
+        clearAuthError,
         profile,
         signInWithGoogle,
         signOutUser,

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import type { Ayah, Language, SurahDetailResponse } from '../types/islamic';
+import { hasBackendApi } from '../utils/backendApi';
 import { safeReadJson } from '../utils/safeFetch';
 import { loadStaticSurah } from '../utils/quranData';
 import { cleanAyahArabic } from './QuranTafsirModal';
@@ -206,9 +207,13 @@ export function VerseImageModal({ open, lang, target, onClose }: VerseImageModal
 
     let cancelled = false;
     setLoadingSurah(true);
-    fetch(`/api/surahs/${target.surahNumber}`)
-      .then((res) => (res.ok ? safeReadJson<SurahDetailResponse>(res) : null))
-      .then(async (data) => {
+    void (async () => {
+      try {
+        let data: SurahDetailResponse | null = null;
+        if (await hasBackendApi()) {
+          const res = await fetch(`/api/surahs/${target.surahNumber}`);
+          if (res.ok) data = await safeReadJson<SurahDetailResponse>(res);
+        }
         const ayahs =
           Array.isArray(data?.ayahs) && data.ayahs.length
             ? data.ayahs
@@ -216,13 +221,12 @@ export function VerseImageModal({ open, lang, target, onClose }: VerseImageModal
         if (cancelled || !ayahs) return;
         setSurahAyahs(ayahs);
         setTotalAyahs(data?.total_ayahs || ayahs.length || target.ayahNumber);
-      })
-      .catch(() => {
+      } catch {
         // fallback cleanly to initial ayah payload
-      })
-      .finally(() => {
+      } finally {
         if (!cancelled) setLoadingSurah(false);
-      });
+      }
+    })();
 
     return () => {
       cancelled = true;

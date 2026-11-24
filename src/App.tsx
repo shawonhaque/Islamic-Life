@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { ArrowRight, BellRing, X } from 'lucide-react';
 import { AdminPage } from './components/AdminPage';
-import { AiStudioHubPage } from './components/AiStudioHubPage';
-import { ArabicLearningPage } from './components/ArabicLearningPage';
 import { AsmaUlHusnaPage } from './components/AsmaUlHusnaPage';
 import { GlobalSearchPage } from './components/GlobalSearchPage';
 import { HadithDuaPage } from './components/HadithDuaPage';
@@ -15,11 +13,26 @@ import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { PrayerTimePage, QiblaPage } from './components/PrayerTimeQiblaPage';
 import { QuranPage } from './components/QuranPage';
 import { CalendarPage, RamadanPage } from './components/RamadanCalendarPage';
-import { SettingsPage } from './components/SettingsPage';
 import { SidebarNav } from './components/SidebarNav';
-import { TafsirHubPage } from './components/TafsirHubPage';
 import { TasbihPage, ZakatPage } from './components/TasbihZakatPage';
-import { EarthGlobe } from './components/EarthGlobe';
+
+// These sections are heavy (three.js, the AI hub and the Arabic course) but
+// most visits never open them, so they are split out of the initial bundle.
+const AiStudioHubPage = lazy(() =>
+  import('./components/AiStudioHubPage').then((m) => ({ default: m.AiStudioHubPage }))
+);
+const ArabicLearningPage = lazy(() =>
+  import('./components/ArabicLearningPage').then((m) => ({ default: m.ArabicLearningPage }))
+);
+const TafsirHubPage = lazy(() =>
+  import('./components/TafsirHubPage').then((m) => ({ default: m.TafsirHubPage }))
+);
+const SettingsPage = lazy(() =>
+  import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage }))
+);
+const EarthGlobe = lazy(() =>
+  import('./components/EarthGlobe').then((m) => ({ default: m.EarthGlobe }))
+);
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
 import { SEED_DUAS, SEED_HADITHS } from './data/islamicSeed';
@@ -42,8 +55,24 @@ import {
   resolveBrowserGeolocation,
 } from './utils/locationWeather';
 import { safeReadJson } from './utils/safeFetch';
+import { hasBackendApi } from './utils/backendApi';
 
 const SELECTED_CITY_STORAGE_KEY = 'il_selected_city_v1';
+
+/** Placeholder shown while a lazily loaded section's chunk downloads. */
+function SectionFallback({ lang }: { lang: 'bn' | 'en' }) {
+  return (
+    <div className="max-w-[1160px] mx-auto px-4 sm:px-6 lg:px-8 py-10" aria-busy="true">
+      <div className="h-7 w-56 rounded-lg bg-[#e6ece8] animate-pulse" />
+      <div className="h-4 w-80 max-w-full rounded bg-[#eef2ef] animate-pulse mt-3" />
+      <div className="mt-6 space-y-3">
+        <div className="h-28 rounded-2xl bg-[#f1f5f2] animate-pulse" />
+        <div className="h-28 rounded-2xl bg-[#f1f5f2] animate-pulse" />
+      </div>
+      <p className="sr-only">{lang === 'bn' ? 'লোড হচ্ছে…' : 'Loading…'}</p>
+    </div>
+  );
+}
 
 function readStoredCity(): CityLocation | null {
   try {
@@ -95,7 +124,7 @@ export default function App() {
   const [weather, setWeather] = useState<LiveWeatherInfo | null>(null);
   const [asrMethod, setAsrMethod] = useState<'hanafi' | 'standard'>('hanafi');
 
-  const { user, syncPreferences } = useAuth();
+  const { user, syncPreferences, authError, clearAuthError } = useAuth();
   const [surahs, setSurahs] = useState<Surah[]>(SEED_SURAHS);
   const [ayahs, setAyahs] = useState<Ayah[]>(SEED_AYAHS);
   const [hadiths, setHadiths] = useState<Hadith[]>(SEED_HADITHS);
@@ -170,6 +199,9 @@ export default function App() {
   }, [city.lat, city.lng, city.isLiveGps, city.tzOffset]);
 
   const fetchContent = useCallback(async () => {
+    // Static deploys have no /api/*, so skip the request entirely rather than
+    // logging a 404 on every page load.
+    if (!(await hasBackendApi())) return;
     try {
       const res = await fetch('/api/content');
       if (!res.ok) return;
@@ -308,6 +340,23 @@ export default function App() {
         )}
 
         <main className="flex-1">
+          {authError && (
+            <div
+              role="alert"
+              data-testid="auth-error-banner"
+              className="mx-4 sm:mx-6 lg:mx-8 mt-4 rounded-xl border border-[#fecaca] bg-[#fef2f2] px-4 py-3 text-sm text-[#991b1b] flex items-start gap-3"
+            >
+              <span className="flex-1 leading-relaxed">{authError}</span>
+              <button
+                type="button"
+                onClick={clearAuthError}
+                aria-label={lang === 'bn' ? 'বার্তা বন্ধ করুন' : 'Dismiss'}
+                className="shrink-0 text-[#991b1b]/70 hover:text-[#991b1b] font-semibold cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+          )}
           {activeSection === 'home' && (
             <HomePage
               lang={lang}
@@ -337,20 +386,24 @@ export default function App() {
             <GlobalSearchPage
               lang={lang}
               initialQuery={searchQuery}
+              surahs={surahs}
               onOpenQuranVerse={handleOpenQuranVerse}
               onOpenHadith={handleOpenHadithFromSearch}
               onOpenDua={handleOpenDuaFromSearch}
+              onOpenKnowledge={() => setActiveSection('knowledge')}
             />
           )}
 
           {activeSection === 'namaz' && <NamazPage lang={lang} />}
 
           {activeSection === 'arabic-learning' && (
-            <ArabicLearningPage
-              lang={lang}
-              onPracticeInAi={handlePracticeArabicInAi}
-              onOpenQuranVerse={handleOpenQuranVerse}
-            />
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <ArabicLearningPage
+                lang={lang}
+                onPracticeInAi={handlePracticeArabicInAi}
+                onOpenQuranVerse={handleOpenQuranVerse}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'quran' && (
@@ -363,11 +416,13 @@ export default function App() {
           )}
 
           {activeSection === 'tafsir' && (
-            <TafsirHubPage
-              lang={lang}
-              surahs={surahs}
-              onOpenInQuran={handleOpenQuranVerse}
-            />
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <TafsirHubPage
+                lang={lang}
+                surahs={surahs}
+                onOpenInQuran={handleOpenQuranVerse}
+              />
+            </Suspense>
           )}
 
           {(activeSection === 'hadith' || activeSection === 'dua') && (
@@ -432,36 +487,42 @@ export default function App() {
                     : 'Drag to rotate the planet, locate your city, and switch to fullscreen.'}
                 </p>
               </div>
-              <EarthGlobe
-                lang={lang}
-                city={city}
-                fullscreen={fullscreenTerrarium}
-                onToggleFullscreen={() => setFullscreenTerrarium((f) => !f)}
-              />
+              <Suspense fallback={<SectionFallback lang={lang} />}>
+                <EarthGlobe
+                  lang={lang}
+                  city={city}
+                  fullscreen={fullscreenTerrarium}
+                  onToggleFullscreen={() => setFullscreenTerrarium((f) => !f)}
+                />
+              </Suspense>
             </div>
           )}
 
           {activeSection === 'ai-studio' && (
-            <AiStudioHubPage
-              lang={lang}
-              prefillChatPrompt={prefillAiPrompt}
-              onOpenAcademy={() => handleNavigate('arabic-learning')}
-              onOpenQuran={() => handleNavigate('quran')}
-            />
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <AiStudioHubPage
+                lang={lang}
+                prefillChatPrompt={prefillAiPrompt}
+                onOpenAcademy={() => handleNavigate('arabic-learning')}
+                onOpenQuran={() => handleNavigate('quran')}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'settings' && (
-            <SettingsPage
-              lang={lang}
-              city={city}
-              liveGpsCity={liveGpsCity}
-              detectingLocation={detectingLocation}
-              prayerTimes={prayerTimes}
-              onSelectCity={handleSelectCity}
-              onDetectLocation={() => void detectMyLocation(true)}
-              onOpenNotifications={() => setNotifModalOpen(true)}
-              onNavigate={handleNavigate}
-            />
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <SettingsPage
+                lang={lang}
+                city={city}
+                liveGpsCity={liveGpsCity}
+                detectingLocation={detectingLocation}
+                prayerTimes={prayerTimes}
+                onSelectCity={handleSelectCity}
+                onDetectLocation={() => void detectMyLocation(true)}
+                onOpenNotifications={() => setNotifModalOpen(true)}
+                onNavigate={handleNavigate}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'admin' && (
@@ -478,12 +539,7 @@ export default function App() {
 
         <footer className="border-t border-[#ebe6da] bg-white/60 mt-10">
           <div className="max-w-[1160px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#6e7268]">
-            <span>
-              <strong className="text-[#1f2421]">Islamic Life</strong> ·{' '}
-              {lang === 'bn'
-                ? 'কুরআন · হাদিস · নামাজ · দোয়া · কিবলা ও যাকাত'
-                : 'Quran · Hadith · Namaz · Dua · Qibla & Zakat'}
-            </span>
+            <span className="font-semibold text-[#1f2421]">Islamic Life</span>
             <span>© {new Date().getFullYear()} Islamic Life</span>
           </div>
         </footer>

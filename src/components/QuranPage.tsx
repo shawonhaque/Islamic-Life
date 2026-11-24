@@ -42,6 +42,7 @@ import {
   transliterateWordToEnglish,
 } from '../utils/arabicTransliteration';
 import { safeReadJson } from '../utils/safeFetch';
+import { hasBackendApi } from '../utils/backendApi';
 import { loadStaticSurah } from '../utils/quranData';
 
 interface QuranPageProps {
@@ -179,8 +180,15 @@ export function QuranPage({ lang, surahs, ayahs, jumpTo }: QuranPageProps) {
     const existingPromise = inFlightSurahRef.current.get(surahNumber);
     if (existingPromise) return existingPromise;
 
-    const promise = fetch(`/api/surahs/${surahNumber}`)
-      .then((res) => (res.ok ? safeReadJson<SurahDetailResponse>(res).catch(() => null) : null))
+    const promise = (async (): Promise<SurahDetailResponse | null> => {
+      if (!(await hasBackendApi())) return null;
+      try {
+        const res = await fetch(`/api/surahs/${surahNumber}`);
+        return res.ok ? await safeReadJson<SurahDetailResponse>(res).catch(() => null) : null;
+      } catch {
+        return null;
+      }
+    })()
       .then(async (data: SurahDetailResponse | null) => {
         const ayahs = Array.isArray(data?.ayahs) && data.ayahs.length
           ? data.ayahs
@@ -513,6 +521,11 @@ export function QuranPage({ lang, surahs, ayahs, jumpTo }: QuranPageProps) {
       }
 
       try {
+        // Static hosts have no API; the cached/static ayah already covers it.
+        if (!(await hasBackendApi())) {
+          if (modalRequestIdRef.current === reqId) setModalLoading(false);
+          return;
+        }
         const res = await fetch(`/api/surahs/${surah.surah_number}/ayahs/${ayahNumber}`);
         const data = await safeReadJson<AyahDetailResponse>(res, `HTTP ${res.status}`);
         if (modalRequestIdRef.current !== reqId) return;

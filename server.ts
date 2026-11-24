@@ -37,9 +37,21 @@ const DATA_DIR = path.resolve(process.cwd(), 'data');
 const QURAN_DIR = path.join(DATA_DIR, 'quran');
 const DB_PATH = path.join(DATA_DIR, 'islamic_life.json');
 const SESSION_COOKIE = 'il_session';
-const SESSION_SECRET =
-  process.env.SESSION_SECRET ||
-  crypto.createHash('sha256').update(process.cwd() + '_islamic_life_secret_v1').digest('hex');
+// A predictable fallback would let anyone forge session cookies, so a missing
+// secret is fatal in production and only tolerated for local development.
+const SESSION_SECRET = (() => {
+  const fromEnv = process.env.SESSION_SECRET?.trim();
+  if (fromEnv && fromEnv.length >= 32) return fromEnv;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(
+      'SESSION_SECRET is required in production (minimum 32 characters). Generate one with: openssl rand -hex 32'
+    );
+  }
+  console.warn(
+    '[security] SESSION_SECRET missing or too short; using an ephemeral dev secret. Sessions will not survive a restart.'
+  );
+  return crypto.randomBytes(48).toString('hex');
+})();
 
 function hashPassword(password: string): string {
   const salt = crypto.randomBytes(16).toString('hex');
@@ -57,16 +69,38 @@ function verifyPassword(password: string, stored: string): boolean {
   return crypto.timingSafeEqual(keyBuf, derivedBuf);
 }
 
+/**
+ * Builds the initial admin account from the environment. No default password
+ * is baked in: a hardcoded one would be published with the source and would
+ * let anyone sign in to the CMS on a deployed instance.
+ */
+function seedAdmins(): AdminRecord[] {
+  const email = process.env.ADMIN_EMAIL?.trim();
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    console.warn(
+      '[security] ADMIN_EMAIL / ADMIN_PASSWORD are not set, so no admin account was created. ' +
+        'Set both to provision one, then restart the server.'
+    );
+    return [];
+  }
+  if (password.length < 12) {
+    throw new Error('ADMIN_PASSWORD must be at least 12 characters long.');
+  }
+  return [
+    {
+      id: 1,
+      name: process.env.ADMIN_NAME?.trim() || 'Administrator',
+      email,
+      passwordHash: hashPassword(password),
+    },
+  ];
+}
+
 function createInitialDb(): DatabaseSchema {
   return {
-    admins: [
-      {
-        id: 1,
-        name: 'Tariq Al-Amin',
-        email: 'admin@islamiclife.com',
-        passwordHash: hashPassword('Admin@123'),
-      },
-    ],
+    admins: seedAdmins(),
     surahs: SEED_SURAHS,
     ayahs: SEED_AYAHS,
     hadiths: SEED_HADITHS,
@@ -233,6 +267,11 @@ async function startServer() {
   });
 
   // Public content API
+  // Cheap capability probe used by the client to detect a static host.
+  app.get('/api/health', (_req, res) => {
+    res.json({ ok: true, service: 'islamic-life' });
+  });
+
   app.get('/api/content', (_req, res) => {
     res.json({
       surahs: db.surahs,

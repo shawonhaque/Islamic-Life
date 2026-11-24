@@ -35,6 +35,7 @@ import {
 } from '../contexts/AuthContext';
 import { resolvePersonaInstruction } from '../data/aiPersonas';
 import type { Language } from '../types/islamic';
+import { hasBackendApi } from '../utils/backendApi';
 import {
   browserChat,
   browserTranscribe,
@@ -241,18 +242,26 @@ export function AiStudioHubPage({
   const [videoResultUrl, setVideoResultUrl] = useState<string | null>(null);
   const [videoError, setVideoError] = useState<string | null>(null);
 
-  // Verify live AI JSON health on mount
+  // Verify live AI JSON health on mount. Static deploys have no backend, so
+  // the probe is skipped and the UI stays in its "key required" state.
   useEffect(() => {
-    fetch('/api/ai/status')
-      .then((res) => (res.ok ? safeReadJson<{ ok?: boolean; geminiConfigured?: boolean }>(res) : null))
-      .then((data) => {
-        if (data && typeof data.geminiConfigured === 'boolean') {
+    let cancelled = false;
+    void (async () => {
+      if (!(await hasBackendApi())) return;
+      try {
+        const res = await fetch('/api/ai/status');
+        if (!res.ok) return;
+        const data = await safeReadJson<{ ok?: boolean; geminiConfigured?: boolean }>(res);
+        if (!cancelled && data && typeof data.geminiConfigured === 'boolean') {
           setAiStatusInfo({ ok: Boolean(data.ok), geminiConfigured: data.geminiConfigured });
         }
-      })
-      .catch(() => {
+      } catch {
         // leave null on offline
-      });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // Subscribe to Firestore collections when signed in

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import {
   Check,
   Clock,
@@ -23,7 +23,11 @@ import {
   getNextPrayerInfo,
 } from '../utils/islamicMath';
 import { NearbyMosquesPanel } from './NearbyMosquesPanel';
-import { QiblaGoogleMap } from './QiblaGoogleMap';
+
+// The map tab pulls in the Google Maps SDK and is only opened on demand.
+const QiblaGoogleMap = lazy(() =>
+  import('./QiblaGoogleMap').then((m) => ({ default: m.QiblaGoogleMap }))
+);
 
 interface PrayerTimePageProps {
   lang: Language;
@@ -859,7 +863,12 @@ export function QiblaPage({
         {/* TAB 3: INTERACTIVE GOOGLE MAPS KAABA LINE */}
         {activeTab === 'kaaba-map' && (
           <div data-testid="qibla-google-map-view">
-            <QiblaGoogleMap
+            <Suspense
+              fallback={
+                <div className="rounded-2xl border border-[#dce7e0] bg-[#f7faf8] h-[360px] animate-pulse" />
+              }
+            >
+              <QiblaGoogleMap
               lang={lang}
               userLat={activeLat}
               userLng={activeLng}
@@ -874,7 +883,8 @@ export function QiblaPage({
                 );
                 if (matched) onSelectCity(matched);
               }}
-            />
+              />
+            </Suspense>
           </div>
         )}
       </div>

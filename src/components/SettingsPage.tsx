@@ -58,6 +58,7 @@ import {
   PRESET_CITIES,
   getLocationClock,
 } from '../utils/islamicMath';
+import { hasBackendApi } from '../utils/backendApi';
 import { safeReadJson } from '../utils/safeFetch';
 
 interface SettingsPageProps {
@@ -259,46 +260,70 @@ export function SettingsPage({
     setDiagRunning(true);
     const checks: Array<{ label: string; status: 'ok' | 'warn' | 'err'; detail: string }> = [];
 
+    const backend = await hasBackendApi();
+
     // 1. Core API JSON health
-    try {
-      const t0 = performance.now();
-      const res = await fetch('/api/content');
-      const data = await safeReadJson<{ surahs?: unknown[] }>(res);
-      const ms = Math.round(performance.now() - t0);
+    if (!backend) {
       checks.push({
         label: 'Core Quran/Hadith API (/api/content)',
-        status: Array.isArray(data.surahs) ? 'ok' : 'warn',
-        detail: `HTTP ${res.status} · ${ms}ms · ${Array.isArray(data.surahs) ? data.surahs.length : 0} Surahs`,
+        status: 'ok',
+        detail:
+          lang === 'bn'
+            ? 'স্ট্যাটিক হোস্ট — বান্ডল করা ডেটা ও ব্রাউজার সার্চ ব্যবহার হচ্ছে'
+            : 'Static host — bundled data and in-browser search are in use',
       });
-    } catch (err) {
-      checks.push({
-        label: 'Core Quran/Hadith API (/api/content)',
-        status: 'err',
-        detail: err instanceof Error ? err.message : 'Request failed',
-      });
+    } else {
+      try {
+        const t0 = performance.now();
+        const res = await fetch('/api/content');
+        const data = await safeReadJson<{ surahs?: unknown[] }>(res);
+        const ms = Math.round(performance.now() - t0);
+        checks.push({
+          label: 'Core Quran/Hadith API (/api/content)',
+          status: Array.isArray(data.surahs) ? 'ok' : 'warn',
+          detail: `HTTP ${res.status} · ${ms}ms · ${Array.isArray(data.surahs) ? data.surahs.length : 0} Surahs`,
+        });
+      } catch (err) {
+        checks.push({
+          label: 'Core Quran/Hadith API (/api/content)',
+          status: 'err',
+          detail: err instanceof Error ? err.message : 'Request failed',
+        });
+      }
     }
 
-    // 2. AI Studio JSON endpoint health
-    try {
-      const res = await fetch('/api/ai/status');
-      const ai = await safeReadJson<{
-        ok?: boolean;
-        geminiConfigured?: boolean;
-        freeModels?: string[];
-      }>(res);
+    // 2. AI endpoint health
+    if (!backend) {
       checks.push({
         label: 'Gemini AI Endpoint (/api/ai/status)',
-        status: ai.geminiConfigured ? 'ok' : 'warn',
-        detail: ai.geminiConfigured
-          ? `JSON OK · Key Configured · Models: ${(ai.freeModels || []).join(', ')}`
-          : 'JSON OK · Server GEMINI_API_KEY not set in Secrets yet',
+        status: 'warn',
+        detail:
+          lang === 'bn'
+            ? 'সার্ভারবিহীন ডিপ্লয় — Gemini চ্যাটের জন্য ব্যাকএন্ড চালু করতে হবে'
+            : 'Serverless deploy — Gemini chat needs the backend running',
       });
-    } catch (err) {
-      checks.push({
-        label: 'Gemini AI Endpoint (/api/ai/status)',
-        status: 'err',
-        detail: err instanceof Error ? err.message : 'Endpoint error',
-      });
+    } else {
+      try {
+        const res = await fetch('/api/ai/status');
+        const ai = await safeReadJson<{
+          ok?: boolean;
+          geminiConfigured?: boolean;
+          freeModels?: string[];
+        }>(res);
+        checks.push({
+          label: 'Gemini AI Endpoint (/api/ai/status)',
+          status: ai.geminiConfigured ? 'ok' : 'warn',
+          detail: ai.geminiConfigured
+            ? `JSON OK · Key Configured · Models: ${(ai.freeModels || []).join(', ')}`
+            : 'JSON OK · Server GEMINI_API_KEY not set in Secrets yet',
+        });
+      } catch (err) {
+        checks.push({
+          label: 'Gemini AI Endpoint (/api/ai/status)',
+          status: 'err',
+          detail: err instanceof Error ? err.message : 'Endpoint error',
+        });
+      }
     }
 
     // 3. Prayer Calculation Engine

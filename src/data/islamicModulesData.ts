@@ -494,7 +494,7 @@ export const TAFSIR_EDITIONS: TafsirEdition[] = [
     author_en: 'Imam al-Husayn al-Baghawi',
     methodology_bn: 'ইসরাঈলী বর্ণনামুক্ত প্রাঞ্জল ও নির্ভরযোগ্য মধ্যম পরিসরের তাফসির।',
     methodology_en: 'Concise, authentic classical commentary filtered of weak narrations.',
-    apiSlug: 'ar-tafsir-al-baghawy',
+    apiSlug: 'ar-tafsir-al-baghawi',
   },
   {
     id: 'ar-jalalayn',
@@ -531,7 +531,7 @@ export const TAFSIR_EDITIONS: TafsirEdition[] = [
     author_en: 'Imam Ibn Kathir (Bangla Edition)',
     methodology_bn: 'সহিহ হাদিস ও তাফসীরে বিল মা’সূরের পূর্ণাঙ্গ বাংলা ভাষ্য।',
     methodology_en: 'Complete Bangla rendering of Imam Ibn Kathir grounded in authentic Hadith.',
-    apiSlug: 'bn-tafsir-ibn-kathir',
+    apiSlug: 'bn-tafseer-ibn-e-kaseer',
   },
   {
     id: 'bn-ahsanul-bayan',
@@ -577,7 +577,7 @@ export const TAFSIR_EDITIONS: TafsirEdition[] = [
     author_en: 'Dr. Abu Bakr Muhammad Zakariya',
     methodology_bn: 'কিং ফাহাদ কুরআন কমপ্লেক্স প্রকাশিত প্রামাণ্য ও সাবলীল বাংলা তাফসির।',
     methodology_en: 'Scholarly King Fahd Complex Bangla translation and Tafsir notes.',
-    apiSlug: 'bn-tafsir-abu-bakr-zakariya',
+    apiSlug: 'bn-tafsir-abu-bakr-zakaria',
   },
   {
     id: 'bn-maariful-quran',

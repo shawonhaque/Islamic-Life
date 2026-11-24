@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState } from 'react';
 import {
   Bell,
   BellOff,
@@ -58,7 +58,11 @@ import {
   getUpcomingIslamicEvents,
   gregorianToHijri,
 } from '../utils/islamicMath';
-import { EarthGlobe } from './EarthGlobe';
+// three.js is ~600 kB and the globe sits below the fold, so it is fetched in
+// its own chunk after first paint instead of blocking the landing page.
+const EarthGlobe = lazy(() =>
+  import('./EarthGlobe').then((m) => ({ default: m.EarthGlobe }))
+);
 import { VerseImageModal, type VerseImageTarget } from './VerseImageModal';
 
 interface HomePageProps {
@@ -1460,12 +1464,18 @@ export function HomePage({
           </button>
         </div>
 
-        <EarthGlobe
-          lang={lang}
-          city={city}
-          fullscreen={fullscreenTerrarium}
-          onToggleFullscreen={onToggleFullscreenTerrarium}
-        />
+        <Suspense
+          fallback={
+            <div className="rounded-2xl border border-[#dce7e0] bg-[#f7faf8] h-[420px] animate-pulse" />
+          }
+        >
+          <EarthGlobe
+            lang={lang}
+            city={city}
+            fullscreen={fullscreenTerrarium}
+            onToggleFullscreen={onToggleFullscreenTerrarium}
+          />
+        </Suspense>
       </section>
 
       {/* Auto-Updating Daily Quran Reflection */}

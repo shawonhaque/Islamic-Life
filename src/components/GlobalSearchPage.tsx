@@ -19,14 +19,18 @@ import type {
   Surah,
 } from '../types/islamic';
 import { cleanAyahArabic } from './QuranTafsirModal';
+import { hasBackendApi } from '../utils/backendApi';
+import { runLocalSearch, warmQuranIndex, type LocalSearchResult } from '../utils/islamicSearch';
 import { safeReadJson } from '../utils/safeFetch';
 
 interface GlobalSearchPageProps {
   lang: Language;
   initialQuery?: string;
+  surahs: Surah[];
   onOpenQuranVerse: (surahNumber: number, ayahNumber: number) => void;
   onOpenHadith: (hadith: Hadith) => void;
   onOpenDua: (dua: Dua) => void;
+  onOpenKnowledge?: () => void;
 }
 
 type SearchScope = 'all' | 'quran' | 'hadith' | 'dua';
@@ -64,13 +68,15 @@ function highlightText(text: string, query: string): ReactNode {
 export function GlobalSearchPage({
   lang,
   initialQuery = '',
+  surahs,
   onOpenQuranVerse,
   onOpenHadith,
   onOpenDua,
+  onOpenKnowledge,
 }: GlobalSearchPageProps) {
   const [query, setQuery] = useState(initialQuery);
   const [scope, setScope] = useState<SearchScope>('all');
-  const [data, setData] = useState<GlobalSearchResponse | null>(null);
+  const [data, setData] = useState<LocalSearchResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -80,6 +86,12 @@ export function GlobalSearchPage({
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
+
+  // Start downloading the Quran index as soon as this page opens so the first
+  // keystroke is not blocked by a ~1.2 MB (gzipped) download.
+  useEffect(() => {
+    warmQuranIndex(surahs);
+  }, [surahs]);
 
   const runSearch = useMemo(
     () => async (q: string, sc: SearchScope, signal?: AbortSignal) => {
@@ -95,23 +107,47 @@ export function GlobalSearchPage({
       setLoading(true);
       setError(null);
 
+      // The express API has the full tafsir and a bigger hadith set, but it
+      // only exists when server.ts is running locally. The probe is shared and
+      // cached, so a static deploy never repeats a 404 per keystroke.
+      if (await hasBackendApi()) {
+        try {
+          const params = new URLSearchParams({ q: trimmed, scope: sc, limit: '45' });
+          const res = await fetch(`/api/search?${params.toString()}`, {
+            signal,
+            headers: { Accept: 'application/json' },
+          });
+          const contentType = res.headers.get('content-type') ?? '';
+          if (res.ok && contentType.includes('application/json')) {
+            const json = await safeReadJson<GlobalSearchResponse>(res, `HTTP ${res.status}`);
+            if (reqSeqRef.current !== seq) return;
+            setData({ ...json, knowledgeResults: [] });
+            return;
+          }
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') return;
+        }
+      }
+
       try {
-        const params = new URLSearchParams({
-          q: trimmed,
-          scope: sc,
-          limit: '45',
-        });
-        const res = await fetch(`/api/search?${params.toString()}`, { signal });
-        const json = await safeReadJson<GlobalSearchResponse>(res, `HTTP ${res.status}`);
+        const local = await runLocalSearch({ query: trimmed, scope: sc, surahs });
         if (reqSeqRef.current !== seq) return;
-        setData(json);
+        setData(local);
+        if (local.quranIndexError) {
+          setError(
+            lang === 'bn'
+              ? 'কুরআনের আয়াতের তালিকা লোড করা যাচ্ছে না। হাদিস, দোয়া ও প্রবন্ধের ফলাফল দেখানো হচ্ছে। ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
+              : 'The Quran index could not be loaded. Hadith, dua and article results are still shown below. Check your connection and retry.'
+          );
+        }
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return;
         if (reqSeqRef.current !== seq) return;
+        const detail = err instanceof Error ? err.message : '';
+        setData(null);
         setError(
           lang === 'bn'
-            ? 'অনুসন্ধান করতে সমস্যা হয়েছে। আবার চেষ্টা করুন।'
-            : 'Unable to complete search right now. Please try again.'
+            ? `অনুসন্ধান সম্পন্ন করা যায়নি। ${detail} ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।`
+            : `Search could not be completed. ${detail} Check your connection and try again.`
         );
       } finally {
         if (reqSeqRef.current === seq) {
@@ -119,7 +155,7 @@ export function GlobalSearchPage({
         }
       }
     },
-    [lang]
+    [lang, surahs]
   );
 
   useEffect(() => {
@@ -158,10 +194,13 @@ export function GlobalSearchPage({
   const hadithResults: Hadith[] = data?.hadithResults ?? [];
   const duaResults: Dua[] = data?.duaResults ?? [];
 
+  const knowledgeResults = data?.knowledgeResults ?? [];
+
   const totalShown =
     (scope === 'all' || scope === 'quran' ? surahMatches.length + quranResults.length : 0) +
     (scope === 'all' || scope === 'hadith' ? hadithResults.length : 0) +
-    (scope === 'all' || scope === 'dua' ? duaResults.length : 0);
+    (scope === 'all' || scope === 'dua' ? duaResults.length : 0) +
+    (scope === 'all' ? knowledgeResults.length : 0);
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-10 space-y-6">
@@ -655,6 +694,59 @@ export function GlobalSearchPage({
                 </article>
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {/* Islamic Knowledge Articles Section */}
+      {data && scope === 'all' && knowledgeResults.length > 0 && (
+        <section className="space-y-3" data-testid="search-section-knowledge">
+          <h2 className="text-base font-bold text-[#183027] flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-[#087653]" />
+            <span>
+              {lang === 'bn'
+                ? `ইসলামিক জ্ঞানকোষ (${knowledgeResults.length})`
+                : `Islamic Encyclopedia (${knowledgeResults.length})`}
+            </span>
+          </h2>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {knowledgeResults.map((hit) => (
+              <article
+                key={`${hit.categoryId}-${hit.article.id}`}
+                className="bg-white rounded-2xl border border-[#ebe6da] p-5 space-y-2.5"
+              >
+                <p className="text-[11px] font-semibold text-[#087653] bg-[#eef5f0] inline-block px-2 py-0.5 rounded-md">
+                  {lang === 'bn' ? hit.categoryTitle_bn : hit.categoryTitle_en}
+                </p>
+                <h3 className="text-base font-bold text-[#183027]">
+                  {highlightText(
+                    lang === 'bn' ? hit.article.title_bn : hit.article.title_en,
+                    data.query
+                  )}
+                </h3>
+                <p className="text-sm text-[#5a7066] line-clamp-4">
+                  {highlightText(
+                    lang === 'bn' ? hit.article.content_bn : hit.article.content_en,
+                    data.query
+                  )}
+                </p>
+                <p className="text-[11px] text-[#6e7268] border-t border-[#f0ece1] pt-2">
+                  <span className="font-semibold">{lang === 'bn' ? 'সূত্র: ' : 'Source: '}</span>
+                  {hit.article.reference}
+                </p>
+                {onOpenKnowledge && (
+                  <button
+                    type="button"
+                    onClick={onOpenKnowledge}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#faf7f0] border border-[#ebe6da] hover:border-[#087653] text-xs font-semibold text-[#087653] cursor-pointer"
+                  >
+                    <span>{lang === 'bn' ? 'জ্ঞানকোষে পড়ুন' : 'Open in encyclopedia'}</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
+              </article>
+            ))}
           </div>
         </section>
       )}

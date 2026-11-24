@@ -1,11 +1,11 @@
 {
-  "name": "react-example",
+  "name": "islamic-life",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "node scripts/build-quran.mjs && node scripts/build-brand.mjs && vite build",
+    "build": "node scripts/build-quran.mjs && node scripts/build-brand.mjs && node scripts/build-seo.mjs && node scripts/build-search-index.mjs && vite build",
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",

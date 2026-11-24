@@ -35,6 +35,11 @@ export default defineConfig(() => {
         },
       },
     ],
+    define: {
+      // The GitHub Pages build is static-only, so the app can skip its
+      // /api/* capability probe instead of paying a round trip per session.
+      __HAS_BACKEND__: JSON.stringify(process.env.GITHUB_PAGES !== 'true'),
+    },
     resolve: {
       alias: {
         '@': path.resolve(import.meta.dirname, '.'),

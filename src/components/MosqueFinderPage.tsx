@@ -140,9 +140,12 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
   }, [userPosition, load]);
 
   const allMosques = useMemo(() => {
-    const seeds = bounds
-      ? SEED_MOSQUES_FOR_TEST.filter((m) => boundsContains(bounds, m.lat, m.lng))
-      : [];
+    // Seeds only stand in when Overpass had nothing to say. Once real data is in
+    // they duplicate it (same mosque, different id), so they are dropped.
+    const seeds =
+      bounds && osmMosques.length === 0
+        ? SEED_MOSQUES_FOR_TEST.filter((m) => boundsContains(bounds, m.lat, m.lng))
+        : [];
     const merged = [...seeds, ...osmMosques].map((m) => applyLocalInfo(m, info));
     const withDistance = merged.map((m) => ({
       mosque: m,

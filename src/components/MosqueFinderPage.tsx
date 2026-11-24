@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Search, X, Navigation, MapPin, Phone, Clock, Plus, Loader2, LocateFixed } from 'lucide-react';
+import { Clock, Loader2, LocateFixed, MapPin, Navigation, Phone, Plus, RefreshCw, Search, X } from 'lucide-react';
 import { MosqueMap, type MosqueMapApi } from './MosqueMap';
 import {
   applyLocalInfo,
@@ -273,9 +273,21 @@ export function MosqueFinderPage({ lang }: MosqueFinderPageProps) {
             )}
 
             {error && !loading && (
-              <p className="text-xs text-[#8a6d3b] bg-[#fdf8ee] border border-[#f0e2c8] rounded-xl px-3 py-2">
-                {error}
-              </p>
+              <div className="text-xs text-[#8a6d3b] bg-[#fdf8ee] border border-[#f0e2c8] rounded-xl px-3 py-2 space-y-2">
+                <p>{error}</p>
+                <button
+                  type="button"
+                  data-testid="mosque-retry"
+                  onClick={() => {
+                    const api = mapApiRef.current;
+                    if (api) void load(api.getBounds());
+                  }}
+                  className="inline-flex items-center gap-1.5 font-semibold text-[#8B6F47] hover:underline cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  {lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Try again'}
+                </button>
+              </div>
             )}
 
           {!loading && visible.length === 0 && (

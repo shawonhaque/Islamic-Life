@@ -39,7 +39,6 @@ import {
   browserChat,
   browserTranscribe,
   GeminiKeyMissingError,
-  getBrowserGeminiKey,
   hasBrowserGeminiKey,
   saveBrowserGeminiKey,
 } from '../utils/geminiBrowser';

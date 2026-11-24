@@ -193,6 +193,29 @@ function toMosque(el: OverpassElement): Mosque | null {
   };
 }
 
+// OSM often maps one mosque twice: a node for the POI inside and a way for the
+// building outline. They share a name and sit within metres of each other, so
+// they are collapsed instead of filling the list with duplicates.
+const DEDUPE_RADIUS_M = 150;
+
+export function dedupeMosques(mosques: Mosque[]): Mosque[] {
+  const kept: Mosque[] = [];
+  const byName = new Map<string, Mosque[]>();
+
+  for (const mosque of mosques) {
+    const key = mosque.name.trim().toLowerCase();
+    const near = byName.get(key) ?? [];
+    const duplicate = near.some(
+      (other) => haversineKm(other.lat, other.lng, mosque.lat, mosque.lng) * 1000 <= DEDUPE_RADIUS_M,
+    );
+    if (duplicate) continue;
+    near.push(mosque);
+    byName.set(key, near);
+    kept.push(mosque);
+  }
+  return kept;
+}
+
 async function queryEndpoint(
   endpoint: string,
   body: string,
@@ -212,7 +235,9 @@ async function queryEndpoint(
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const json: { elements?: OverpassElement[] } = await res.json();
-    return (json.elements ?? []).map(toMosque).filter((m): m is Mosque => m !== null);
+    return dedupeMosques(
+      (json.elements ?? []).map(toMosque).filter((m): m is Mosque => m !== null),
+    );
   } finally {
     clearTimeout(timer);
     signal.removeEventListener('abort', relay);

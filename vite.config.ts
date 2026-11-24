@@ -4,8 +4,15 @@ import fs from 'fs';
 import path from 'path';
 import {defineConfig} from 'vite';
 
+// GitHub Pages serves project sites from /<repo>/, so every asset URL needs
+// that prefix. `base` is the one place that prefix is declared; Vite rewrites
+// the bundle's own references, and nothing in the app hardcodes an absolute
+// path that would escape it.
+const REPO_BASE = '/Islamic-Life/';
+
 export default defineConfig(() => {
   return {
+    base: process.env.GITHUB_PAGES === 'true' ? REPO_BASE : '/',
     plugins: [
       react(),
       tailwindcss(),
@@ -19,8 +26,8 @@ export default defineConfig(() => {
           if (error) {
             return;
           }
-          const distDir = path.resolve(__dirname, 'dist');
-          const srcAssets = path.resolve(__dirname, 'src/assets');
+          const distDir = path.resolve(import.meta.dirname, 'dist');
+          const srcAssets = path.resolve(import.meta.dirname, 'src/assets');
           const distAssets = path.resolve(distDir, 'src/assets');
           if (fs.existsSync(distDir) && fs.existsSync(srcAssets)) {
             fs.cpSync(srcAssets, distAssets, {recursive: true, force: true});
@@ -30,7 +37,7 @@ export default defineConfig(() => {
     ],
     resolve: {
       alias: {
-        '@': path.resolve(__dirname, '.'),
+        '@': path.resolve(import.meta.dirname, '.'),
       },
     },
     server: {

@@ -60,7 +60,7 @@ progress follow you across devices. Without it, everything stays in
 | **নামাজের সময়** | Prayer times computed locally from GPS or a chosen city, with six calculation methods (Karachi, MWL, ISNA, Umm al-Qura, Egyptian, Tehran) and adhan reminders. |
 | **কিবলা** | Compass bearing to the Kaaba, plus an optional Google Maps view. |
 | **ইসলামিক জ্ঞানকোষ** | 8 categories, 32 articles, and 9 Bengali video lectures playable in place. |
-| **মসজিদ খুঁজুন** | Split-screen mosque finder on OpenStreetMap. Live geolocation with a Gazipur fallback, Haversine distances, clustered markers, name/street search, Jumu'ah and phone filters, Google Maps directions, and community Jumu'ah/phone info saved to `localStorage`. Real mosques come from the Overpass API within 5 km. |
+| **মসজিদ খুঁজুন** | Split-screen mosque finder on OpenStreetMap that works in any city. Mosques load from the Overpass API for whatever the map is showing, matched on both `amenity=place_of_worship` and `building=mosque`. Clustered markers, Haversine distances from your location, name/street search, Jumu'ah and phone filters, Google Maps directions, and community Jumu'ah/phone info saved to `localStorage`. |
 | **আরবি ও কুরআন শিক্ষা** | Arabic alphabet and Quran-reading academy with progress tracking. |
 | **ডিজিটাল তাসবিহ** | Tap counter with presets, haptics, and session history. |
 | **আল্লাহর ৯৯ নাম** | The 99 names with meanings and explanations. |

@@ -65,9 +65,16 @@
 - The mosque finder (`MosqueFinderPage` → `MosqueMap` + `src/utils/mosqueData.ts`)
   is the only Leaflet surface. Keep `leaflet` and `leaflet.markercluster` lazy:
   the CSS imports alone add ~17 kB, so the page stays behind `React.lazy`.
-  Public Overpass mirrors answer 502 "at capacity" for minutes at a time, so
-  `fetchMosquesNear` tries three mirrors with a 12 s bound each and falls back
-  to the seed list. Do not raise that without a visible loading state.
+- The finder is worldwide, so the map viewport is the query: `fetchMosquesInBounds`
+  takes a bbox, never a radius. Any new search path must pass `api.getBounds()`.
+  `MAX_BOUNDS_SPAN_DEG` guards Overpass, which times out on large boxes.
+- Only planet-wide Overpass mirrors may go in `OVERPASS_ENDPOINTS`. Regional
+  extracts (`overpass.osm.ch` is Switzerland-only) return 200 with an empty set
+  for everywhere else, which the UI cannot tell apart from "no mosques here".
+- Mirrors are raced, not iterated: sequential attempts let one dead mirror eat
+  the entire budget. Do not "simplify" this back into a for-loop.
+- Public mirrors flake in waves (502 / 25 s stalls). Treat an empty response as
+  "busy" unless a mirror explicitly answered, and keep the two messages distinct.
 - Leaflet measures its container on `L.map()`. If the element is not laid out
   yet, the map keeps a zero size and every marker lands off-screen — this is
   what made the map look empty at 390 px while the list still rendered. The

@@ -9,6 +9,7 @@ import {
   FileAudio,
   Film,
   GraduationCap,
+  KeyRound,
   Languages,
   LogIn,
   MessageSquare,
@@ -32,12 +33,21 @@ import {
   type ChatThreadRecord,
   type StudyNoteRecord,
 } from '../contexts/AuthContext';
+import { resolvePersonaInstruction } from '../data/aiPersonas';
 import type { Language } from '../types/islamic';
 import {
-  API_UNAVAILABLE_MESSAGE_BN,
-  ApiUnavailableError,
+  browserChat,
+  browserTranscribe,
+  GeminiKeyMissingError,
+  getBrowserGeminiKey,
+  hasBrowserGeminiKey,
+  saveBrowserGeminiKey,
+} from '../utils/geminiBrowser';
+import {
+  isServerOnlyFailure,
   postJson,
   safeReadJson,
+  SERVER_ONLY_MEDIA_MESSAGE_BN,
 } from '../utils/safeFetch';
 
 interface AiStudioHubPageProps {
@@ -141,6 +151,9 @@ export function AiStudioHubPage({
   const [aiStatusInfo, setAiStatusInfo] = useState<{ ok: boolean; geminiConfigured: boolean } | null>(
     null
   );
+  const [browserKeyDraft, setBrowserKeyDraft] = useState('');
+  const [browserKeySaved, setBrowserKeySaved] = useState<boolean>(() => hasBrowserGeminiKey());
+  const [browserKeyError, setBrowserKeyError] = useState<string | null>(null);
 
   // --- Multi-Turn Chat State ---
   const [threads, setThreads] = useState<ChatThreadRecord[]>([]);
@@ -309,6 +322,49 @@ export function AiStudioHubPage({
     }
   };
 
+  /**
+   * Prefers the express AI proxy when it is running, then falls back to a
+   * direct browser call with the visitor's own Gemini key. The static GitHub
+   * Pages deploy has no server, so without this the studio was dead there.
+   */
+  const requestChatReply = async (payload: {
+    model: ChatModelId;
+    personaId: string;
+    customSystemInstruction: string;
+    thinkingDepth: ThinkingDepth;
+    history: Array<{ role: 'user' | 'model'; text: string }>;
+    message: string;
+  }): Promise<string> => {
+    try {
+      const data = await postJson<{ text?: string; error?: string }>(
+        '/api/ai/chat',
+        payload,
+        'Chat request failed.'
+      );
+      const reply = String(data.text || '').trim();
+      if (!reply) throw new Error('Model returned an empty response.');
+      return reply;
+    } catch (err) {
+      const serverUnavailable =
+        err instanceof TypeError || // fetch itself failed
+        (err instanceof Error && /HTTP 4\d\d|HTTP 5\d\d|HTML page|not running/i.test(err.message));
+      if (!serverUnavailable || !hasBrowserGeminiKey()) {
+        if (serverUnavailable && !hasBrowserGeminiKey()) throw new GeminiKeyMissingError();
+        throw err;
+      }
+      return browserChat({
+        model: payload.model,
+        systemInstruction: resolvePersonaInstruction(
+          payload.personaId,
+          payload.customSystemInstruction
+        ),
+        history: payload.history,
+        message: payload.message,
+        thinkingDepth: payload.thinkingDepth,
+      });
+    }
+  };
+
   const handleStartNewThread = () => {
     setActiveThreadId(null);
     setLocalMessages([]);
@@ -339,22 +395,14 @@ export function AiStudioHubPage({
     }
 
     try {
-      const data = await postJson<{ text?: string; error?: string }>(
-        '/api/ai/chat',
-        {
-          model: chatModel,
-          personaId,
-          customSystemInstruction: customInstruction.trim(),
-          thinkingDepth,
-          history: historySnapshot,
-          message: text,
-        },
-        'Chat request failed.'
-      );
-      const replyText = String(data.text || '').trim();
-      if (!replyText) {
-        throw new Error('Model returned an empty response.');
-      }
+      const replyText = await requestChatReply({
+        model: chatModel,
+        personaId,
+        customSystemInstruction: customInstruction.trim(),
+        thinkingDepth,
+        history: historySnapshot,
+        message: text,
+      });
 
       if (user && user.emailVerified) {
         let targetThreadId = activeThreadId;
@@ -382,8 +430,13 @@ export function AiStudioHubPage({
         ]);
       }
     } catch (err) {
-      if (err instanceof ApiUnavailableError) {
-        setChatError(lang === 'bn' ? API_UNAVAILABLE_MESSAGE_BN : err.message);
+      if (err instanceof GeminiKeyMissingError) {
+        setChatError(
+          lang === 'bn'
+            ? 'এআই চালু করতে সেটিংস ট্যাবে আপনার নিজের Gemini API key যোগ করুন। key শুধু আপনার ব্রাউজারে সংরক্ষিত থাকে।'
+            : 'Add your own Gemini API key in the Settings tab to turn AI on. The key stays in this browser only.'
+        );
+        setActiveTab('settings');
       } else {
         setChatError(err instanceof Error ? err.message : 'Unable to complete chat request.');
       }
@@ -494,20 +547,11 @@ export function AiStudioHubPage({
     setTranscribeLoading(true);
     setTranscribeError(null);
     try {
-      const res = await fetch('/api/ai/transcribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          audioBase64,
-          mimeType: audioMime,
-          languageHint,
-        }),
+      const text = await requestTranscript({
+        audioBase64,
+        mimeType: audioMime,
+        languageHint,
       });
-      const data = await safeReadJson<{ transcript?: string; error?: string }>(
-        res,
-        'Audio transcription failed.'
-      );
-      const text = String(data.transcript || '').trim();
       setTranscriptText(text);
       if (text) {
         if (user && user.emailVerified) {
@@ -538,9 +582,43 @@ export function AiStudioHubPage({
         }
       }
     } catch (err) {
-      setTranscribeError(err instanceof Error ? err.message : 'Transcription error.');
+      if (err instanceof GeminiKeyMissingError) {
+        setTranscribeError(
+          lang === 'bn'
+            ? 'ট্রান্সক্রিপশনের জন্য সেটিংস ট্যাবে আপনার নিজের Gemini API key যোগ করুন।'
+            : 'Add your own Gemini API key in the Settings tab to transcribe audio.'
+        );
+        setActiveTab('settings');
+      } else {
+        setTranscribeError(err instanceof Error ? err.message : 'Transcription error.');
+      }
     } finally {
       setTranscribeLoading(false);
+    }
+  };
+
+  const requestTranscript = async (payload: {
+    audioBase64: string;
+    mimeType: string;
+    languageHint: 'auto' | 'Bengali' | 'English' | 'Arabic';
+  }): Promise<string> => {
+    try {
+      const res = await fetch('/api/ai/transcribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await safeReadJson<{ transcript?: string; error?: string }>(
+        res,
+        'Audio transcription failed.'
+      );
+      return String(data.transcript || '').trim();
+    } catch (err) {
+      const serverUnavailable =
+        err instanceof TypeError || (err instanceof Error && /HTML page|not running/i.test(err.message));
+      if (!serverUnavailable) throw err;
+      if (!hasBrowserGeminiKey()) throw new GeminiKeyMissingError();
+      return browserTranscribe(payload);
     }
   };
 
@@ -723,7 +801,15 @@ export function AiStudioHubPage({
         lyrics: data.lyrics || '',
       });
     } catch (err) {
-      setMusicError(err instanceof Error ? err.message : 'Music generation request failed.');
+      setMusicError(
+        isServerOnlyFailure(err)
+          ? lang === 'bn'
+            ? SERVER_ONLY_MEDIA_MESSAGE_BN
+            : 'Music generation needs the AI server and cannot run from the browser. Chat and transcription work here with your own key.'
+          : err instanceof Error
+          ? err.message
+          : 'Music generation request failed.'
+      );
     } finally {
       setMusicLoading(false);
     }
@@ -751,7 +837,15 @@ export function AiStudioHubPage({
       );
       setVideoResultUrl(data.videoDataUrl || null);
     } catch (err) {
-      setVideoError(err instanceof Error ? err.message : 'Video generation request failed.');
+      setVideoError(
+        isServerOnlyFailure(err)
+          ? lang === 'bn'
+            ? SERVER_ONLY_MEDIA_MESSAGE_BN
+            : 'Video generation needs the AI server and cannot run from the browser. Chat and transcription work here with your own key.'
+          : err instanceof Error
+          ? err.message
+          : 'Video generation request failed.'
+      );
     } finally {
       setVideoLoading(false);
     }
@@ -792,18 +886,26 @@ export function AiStudioHubPage({
           <div className="inline-flex items-center gap-2 text-xs font-semibold text-[#8f6319] mb-1">
             <Sparkles className="w-4 h-4 text-[#b58328]" />
             <span>{lang === 'bn' ? 'এআই ও ক্লাউড স্টুডিও' : 'AI & Cloud Studio'}</span>
-            {aiStatusInfo && (
-              <span className="text-[11px] font-medium text-[#087653]">
-                ·{' '}
-                {aiStatusInfo.geminiConfigured
-                  ? lang === 'bn'
-                    ? 'ফ্রি-টিয়ার AI সংযুক্ত'
-                    : 'Free-Tier AI Connected'
-                  : lang === 'bn'
-                  ? 'সার্ভার কী প্রয়োজন (Secrets)'
-                  : 'Server Key Needed'}
-              </span>
-            )}
+            <span
+              className={`text-[11px] font-medium ${
+                aiStatusInfo?.geminiConfigured || browserKeySaved
+                  ? 'text-[#087653]'
+                  : 'text-[#8f6319]'
+              }`}
+            >
+              ·{' '}
+              {aiStatusInfo?.geminiConfigured
+                ? lang === 'bn'
+                  ? 'সার্ভার এআই সংযুক্ত'
+                  : 'Server AI connected'
+                : browserKeySaved
+                ? lang === 'bn'
+                  ? 'আপনার key দিয়ে এআই চালু'
+                  : 'AI on with your key'
+                : lang === 'bn'
+                ? 'এআই চালু করতে key দিন'
+                : 'Add a key to turn AI on'}
+            </span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-bold text-[#1f2421]">
             {lang === 'bn'
@@ -812,8 +914,8 @@ export function AiStudioHubPage({
           </h1>
           <p className="text-sm text-[#6e7268] mt-1">
             {lang === 'bn'
-              ? 'জেমিনি ৪ হাইড্রোজেন ও ৩.১ ফ্ল্যাশ লাইটে মাল্টি-টার্ন কথোপকথন এবং জেমিনি ৩.৫-এ অডিও থেকে টেক্সট।'
-              : 'Multi-turn conversations with Gemini 4 Hydrogen & 3.1 Flash Lite, audio transcription, and study notes.'}
+              ? 'জেমিনি ২.৫ ফ্ল্যাশ, প্রো ও ফ্ল্যাশ লাইটে মাল্টি-টার্ন কথোপকথন এবং অডিও থেকে টেক্সট।'
+              : 'Multi-turn conversations with Gemini 2.5 Flash, Pro & Flash Lite, plus audio transcription and study notes.'}
           </p>
         </div>
 
@@ -862,6 +964,33 @@ export function AiStudioHubPage({
           );
         })}
       </div>
+
+      {/* AI key prompt, shown on every tab while the deploy has no server key */}
+      {!browserKeySaved && !aiStatusInfo?.geminiConfigured && (
+        <div className="rounded-2xl border border-[#b58328]/35 bg-[#fdf6e7] p-4 sm:p-5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <KeyRound className="w-5 h-5 text-[#8f6319] shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm font-bold text-[#1f2421]">
+                {lang === 'bn' ? 'এআই চালু করতে একটি key দিন' : 'Add a key to turn AI on'}
+              </p>
+              <p className="text-xs text-[#6e7268] mt-0.5">
+                {lang === 'bn'
+                  ? 'এই সাইট স্ট্যাটিক, তাই সার্ভার নেই। আপনার নিজের ফ্রি Gemini key দিলে চ্যাট ও অডিও ট্রান্সক্রিপশন এখানেই চলবে। key শুধু আপনার ব্রাউজারে থাকে।'
+                  : 'This site is static, so there is no AI server. Your own free Gemini key enables chat and audio transcription right here. The key stays in your browser.'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setActiveTab('settings')}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#087653] hover:bg-[#065c40] text-white text-xs font-semibold cursor-pointer"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'সেটিংসে key দিন' : 'Add key in Settings'}</span>
+          </button>
+        </div>
+      )}
 
       {/* TAB 1: Multi-Turn Gemini Chatbot */}
       {activeTab === 'chat' && (
@@ -2066,6 +2195,109 @@ export function AiStudioHubPage({
                 <option value="high">{lang === 'bn' ? 'গভীর (High)' : 'Deep (High)'}</option>
               </select>
             </label>
+          </div>
+
+          <div className="rounded-xl border border-[#ebe6da] bg-[#faf7f0] p-4 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-xs font-bold text-[#1f2421]">
+                  {lang === 'bn' ? 'নিজের Gemini API key' : 'Your own Gemini API key'}
+                </p>
+                <p className="text-[11px] text-[#6e7268] mt-0.5">
+                  {lang === 'bn'
+                    ? 'সার্ভার ছাড়া এই স্ট্যাটিক সাইটে এআই চালাতে key দরকার। key শুধু এই ব্রাউজারের localStorage-এ থাকে, কোথাও পাঠানো হয় না।'
+                    : 'The static site has no AI server, so a key unlocks chat and transcription. It stays in this browser localStorage and is never uploaded.'}
+                </p>
+              </div>
+              <span
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold ${
+                  browserKeySaved
+                    ? 'bg-[#eef5f0] text-[#087653] border border-[#087653]/30'
+                    : 'bg-[#fdf6e7] text-[#8f6319] border border-[#b58328]/30'
+                }`}
+              >
+                {browserKeySaved
+                  ? lang === 'bn'
+                    ? 'সংরক্ষিত'
+                    : 'Saved'
+                  : lang === 'bn'
+                  ? 'সংরক্ষিত নয়'
+                  : 'Not saved'}
+              </span>
+            </div>
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input
+                type="password"
+                value={browserKeyDraft}
+                onChange={(e) => {
+                  setBrowserKeyDraft(e.target.value);
+                  setBrowserKeyError(null);
+                }}
+                placeholder="AIza..."
+                autoComplete="off"
+                spellCheck={false}
+                className="flex-1 px-3 py-2 rounded-xl border border-[#ebe6da] bg-white text-xs font-mono text-[#1f2421]"
+              />
+              <button
+                type="button"
+                onClick={() => {
+                  const clean = browserKeyDraft.trim();
+                  if (!clean) {
+                    setBrowserKeyError(
+                      lang === 'bn' ? 'আগে key পেস্ট করুন।' : 'Paste a key first.'
+                    );
+                    return;
+                  }
+                  if (!/^AIza[0-9A-Za-z_-]{20,}$/.test(clean)) {
+                    setBrowserKeyError(
+                      lang === 'bn'
+                        ? 'Gemini key সাধারণত AIza দিয়ে শুরু হয়। আবার দেখুন।'
+                        : 'Gemini keys usually start with AIza. Please double-check.'
+                    );
+                    return;
+                  }
+                  saveBrowserGeminiKey(clean);
+                  setBrowserKeySaved(true);
+                  setBrowserKeyDraft('');
+                }}
+                className="px-4 py-2 rounded-xl bg-[#087653] hover:bg-[#065c40] text-white text-xs font-semibold cursor-pointer"
+              >
+                {lang === 'bn' ? 'সংরক্ষণ করুন' : 'Save key'}
+              </button>
+              {browserKeySaved && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    saveBrowserGeminiKey('');
+                    setBrowserKeySaved(false);
+                    setBrowserKeyDraft('');
+                    setBrowserKeyError(null);
+                  }}
+                  className="px-4 py-2 rounded-xl border border-[#ebe6da] hover:border-[#b91c1c] text-xs font-semibold text-[#b91c1c] cursor-pointer"
+                >
+                  {lang === 'bn' ? 'মুছুন' : 'Remove'}
+                </button>
+              )}
+            </div>
+
+            {browserKeyError && (
+              <p className="text-[11px] font-medium text-[#b91c1c]">{browserKeyError}</p>
+            )}
+            <p className="text-[11px] text-[#6e7268]">
+              {lang === 'bn' ? 'key কোথায় পাবেন: ' : 'Get a key at '}
+              <a
+                href="https://aistudio.google.com/apikey"
+                target="_blank"
+                rel="noreferrer"
+                className="font-semibold text-[#087653] underline"
+              >
+                aistudio.google.com/apikey
+              </a>
+              {lang === 'bn'
+                ? ' — ফ্রি টিয়ারেই যথেষ্ট। ব্রাউজার থেকে কল করতে key-তে HTTP referrer restriction যোগ করলে সবচেয়ে নিরাপদ।'
+                : ' — the free tier is enough. For browser calls, add an HTTP referrer restriction to the key.'}
+            </p>
           </div>
 
           <label className="block text-xs font-semibold text-[#494e45]">

@@ -46,6 +46,17 @@ export async function safeReadJson<T = unknown>(
 export const API_UNAVAILABLE_MESSAGE_BN =
   'এই সুবিধাটি এআই সার্ভারে চলে, যা এই স্ট্যাটিক ডিপ্লয়মেন্টে চালু নেই। বাকি সব বিভাগ (কুরআন, নামাজ, হাদিস, জ্ঞানকোষ) সম্পূর্ণ কাজ করে।';
 
+export const SERVER_ONLY_MEDIA_MESSAGE_BN =
+  'মিউজিক ও ভিডিও জেনারেশন শুধু এআই সার্ভারে চলে, ব্রাউজার থেকে চালানো যায় না। চ্যাট ও অডিও ট্রান্সক্রিপশন আপনার নিজের key দিয়ে এখানেই কাজ করে।';
+
+/** True when the request never reached a real API because the deploy is static. */
+export function isServerOnlyFailure(err: unknown): boolean {
+  return (
+    err instanceof ApiUnavailableError ||
+    (err instanceof Error && /HTML page instead of JSON|not running on this deployment/i.test(err.message))
+  );
+}
+
 export class ApiUnavailableError extends Error {
   constructor(message: string) {
     super(message);

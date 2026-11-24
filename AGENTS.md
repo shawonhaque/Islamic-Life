@@ -25,6 +25,11 @@
   the SPA shell with HTTP 200, so use `postJson` from `src/utils/safeFetch.ts`
   for server-only features; it raises `ApiUnavailableError` instead of failing
   on JSON parsing.
+- Chat and audio transcription therefore have two paths: the express proxy
+  when it exists, then `src/utils/geminiBrowser.ts` calling Gemini directly
+  with a key the visitor saves in localStorage. Keep both in sync — persona
+  text lives in `src/data/aiPersonas.ts` so the server and browser share it.
+  Music and video have no browser path; they report a server-only message.
 - Gemini model names must exist upstream. The SDK's `Model` union includes
   placeholder names that the live API rejects; the endpoints in `server.ts`
   pin real ones through `resolveModel`.

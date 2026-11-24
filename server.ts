@@ -7,6 +7,7 @@ import { GoogleGenAI, ThinkingLevel } from '@google/genai';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import { SEED_AYAHS, SEED_SURAHS } from './src/data/surahs114.ts';
+import { resolvePersonaInstruction } from './src/data/aiPersonas.ts';
 import { SEED_DUAS, SEED_HADITHS } from './src/data/islamicSeed.ts';
 import { TAFSIR_EDITIONS } from './src/data/islamicModulesData.ts';
 import type { Ayah, Dua, Hadith, Surah } from './src/types/islamic.ts';
@@ -916,19 +917,6 @@ async function startServer() {
     });
   });
 
-  const CHAT_PERSONA_INSTRUCTIONS: Record<string, string> = {
-    'islamic-scholar':
-      'You are an Islamic Life Study Companion. Answer respectfully in the language the user writes in (Bengali, English, or Arabic). Reference general themes from the Quran and authentic Sunnah accurately, distinguish scholarly opinions neutrally, and remind users to consult qualified local scholars for personal fatwas.',
-    'quran-tafsir':
-      'You are a Quran & Tafsir Tutor. Help users understand Surah themes, historical context, key Arabic terms with clear Bengali/English explanations, and practical spiritual takeaways.',
-    'deep-reasoner':
-      'You are a thorough Islamic history, theology, and comparative ethics researcher. Provide well-structured, step-by-step analysis with balanced citations and clear headings.',
-    'daily-companion':
-      'You are a concise, warm daily Islamic companion helping with daily duas, prayer preparation, Ramadan planning, zakat concepts, and productivity.',
-    'arabic-tutor':
-      'You are an Arabic Language, Tajweed & Makharij Tutor for Bengali and English learners. Teach Arabic letters, the 17 Makharij al-Huruf, clear Bengali/Latin pronunciation, and practical spoken Arabic dialogues step by step.',
-  };
-
   app.post('/api/ai/chat', async (req, res) => {
     try {
       const message = cleanText(req.body?.message, 8000);
@@ -942,11 +930,7 @@ async function startServer() {
 
       const personaId = cleanText(req.body?.personaId, 48) || 'islamic-scholar';
       const customPrompt = cleanText(req.body?.customSystemInstruction, 1500);
-      const baseInstruction =
-        CHAT_PERSONA_INSTRUCTIONS[personaId] || CHAT_PERSONA_INSTRUCTIONS['islamic-scholar'];
-      const systemInstruction = customPrompt
-        ? `${baseInstruction}\n\nAdditional user guidance: ${customPrompt}`
-        : baseInstruction;
+      const systemInstruction = resolvePersonaInstruction(personaId, customPrompt);
 
       const rawHistory: unknown[] = Array.isArray(req.body?.history) ? req.body.history : [];
       const history = rawHistory

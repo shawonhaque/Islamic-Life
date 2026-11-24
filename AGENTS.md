@@ -55,3 +55,15 @@
   box to zero height. Pick one branch per property.
 - `SectionId` in `src/types/islamic.ts` drives routing in `src/App.tsx` and the
   nav lists in `SidebarNav.tsx` / `TopNav.tsx`; add a section in all four.
+- Sign-in fails on GitHub Pages with `auth/unauthorized-domain` because
+  `firebase-applet-config.json` points at the AI Studio applet project, whose
+  authorized domains are only `*.web.app` and `*.run.app`. The fix is config,
+  not code: add `shawonhaque.github.io` under Authentication → Settings →
+  Authorized domains, or point the build at another project with
+  `VITE_FIREBASE_*` (see `.env.example` and the secrets in `deploy.yml`).
+  `src/lib/firebase.ts` merges those overrides over the committed JSON.
+- A Gemini key can list models and still fail generation with 403 when its
+  project has no billing. `describeGeminiError` distinguishes that from a
+  referrer restriction, so do not assume 403 means the key is browser-blocked.
+- `python3 -m http.server` keeps serving whatever it started with. When
+  verifying a fresh `dist`, start a server on a new port instead of reusing one.

@@ -124,7 +124,13 @@ function describeGeminiError(status: number, payload: GeminiResponse): string {
     return 'The saved Gemini API key is not valid. Check it in Settings.';
   }
   if (status === 403) {
-    return 'This API key is not allowed from a browser. In Google AI Studio, set the key restriction to "HTTP referrers" and add this site.';
+    if (/free tier is not available|set up billing/i.test(detail)) {
+      return 'This Gemini key belongs to a project without billing enabled. Enable billing in Google AI Studio, or use a key from another project.';
+    }
+    if (/referer|referrer|blocked/i.test(detail)) {
+      return 'This API key is not allowed from a browser. In Google AI Studio, set the key restriction to "HTTP referrers" and add this site.';
+    }
+    return detail || 'This Gemini key was rejected. Check its restrictions in Google AI Studio.';
   }
   if (status === 404) {
     return 'This Gemini model is not available for your key. Pick another model in Settings.';

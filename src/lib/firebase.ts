@@ -1,10 +1,31 @@
 import { initializeApp } from 'firebase/app';
 import { GoogleAuthProvider, getAuth } from 'firebase/auth';
 import { doc, getDocFromServer, getFirestore } from 'firebase/firestore';
-import firebaseConfig from '../../firebase-applet-config.json';
+import appletConfig from '../../firebase-applet-config.json';
+
+// The committed config points at the AI Studio applet project, which only
+// authorizes *.web.app and *.run.app origins. Deploying elsewhere (GitHub
+// Pages, a custom domain) needs a project with that origin in its authorized
+// domains, supplied through VITE_FIREBASE_* at build time.
+const env = import.meta.env;
+const overrides = Object.fromEntries(
+  Object.entries({
+    apiKey: env.VITE_FIREBASE_API_KEY,
+    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId: env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId: env.VITE_FIREBASE_APP_ID,
+    firestoreDatabaseId: env.VITE_FIREBASE_FIRESTORE_DATABASE_ID,
+  }).filter(([, value]) => typeof value === 'string' && value.trim())
+);
+
+const firebaseConfig = { ...appletConfig, ...overrides };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+export const db = firebaseConfig.firestoreDatabaseId
+  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  : getFirestore(app);
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
 

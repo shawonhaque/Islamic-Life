@@ -20,6 +20,8 @@ import type {
   TafsirReadResponse,
   TafsirViewTab,
 } from '../types/islamic';
+import { hasBackendApi } from '../utils/backendApi';
+import { runLocalSearch } from '../utils/islamicSearch';
 import { safeReadJson } from '../utils/safeFetch';
 import { readTafsir } from '../utils/tafsirReader';
 
@@ -133,15 +135,17 @@ export function TafsirHubPage({ lang, surahs, onOpenInQuran }: TafsirHubPageProp
     async (editionId: string, surahNum: number, ayahNum: number) => {
       setLoadingTafsir(true);
       try {
-        const res = await fetch(
-          `/api/tafsir/read?edition=${encodeURIComponent(editionId)}&surah=${surahNum}&ayah=${ayahNum}`
-        );
-        if (res.ok) {
-          const data = await safeReadJson<TafsirReadResponse>(res);
-          setTafsirData(data);
-        } else {
-          setTafsirData(await readTafsirLocally(editionId, surahNum, ayahNum));
+        if (await hasBackendApi()) {
+          const res = await fetch(
+            `/api/tafsir/read?edition=${encodeURIComponent(editionId)}&surah=${surahNum}&ayah=${ayahNum}`
+          );
+          if (res.ok) {
+            const data = await safeReadJson<TafsirReadResponse>(res);
+            setTafsirData(data);
+            return;
+          }
         }
+        setTafsirData(await readTafsirLocally(editionId, surahNum, ayahNum));
       } catch {
         setTafsirData(await readTafsirLocally(editionId, surahNum, ayahNum));
       } finally {
@@ -169,11 +173,24 @@ export function TafsirHubPage({ lang, surahs, onOpenInQuran }: TafsirHubPageProp
     }
     setSearchingTafsir(true);
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&scope=quran&limit=24`);
-      if (res.ok) {
-        const data = await safeReadJson<{ quranResults?: QuranSearchResult[] }>(res);
-        setTafsirSearchResults(Array.isArray(data.quranResults) ? data.quranResults : []);
+      // Prefer the express endpoint when it exists; on a static host fall back
+      // to the same in-browser index the global search page uses.
+      let results: QuranSearchResult[] = [];
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&scope=quran&limit=24`);
+        if (res.ok) {
+          const data = await safeReadJson<{ quranResults?: QuranSearchResult[] }>(res);
+          if (Array.isArray(data.quranResults)) results = data.quranResults;
+        }
+      } catch {
+        results = [];
       }
+
+      if (results.length === 0) {
+        const local = await runLocalSearch({ query: q, scope: 'quran', limit: 24, surahs });
+        results = local.quranResults;
+      }
+      setTafsirSearchResults(results);
     } catch {
       setTafsirSearchResults([]);
     } finally {

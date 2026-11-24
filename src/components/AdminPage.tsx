@@ -275,10 +275,12 @@ export function AdminPage({
 
           <div className="mt-4 p-3 rounded-xl bg-[#f7faf8] border border-[#dce7e0] text-xs text-[#5a7066]">
             <p className="font-semibold text-[#183027]">
-              {lang === 'bn' ? 'ডেমো অ্যাডমিন তথ্য:' : 'Seeded Admin Credentials:'}
+              {lang === 'bn' ? 'কীভাবে অ্যাডমিন তৈরি হয়' : 'How the admin account is created'}
             </p>
-            <p className="font-mono-tabular mt-0.5">
-              admin@islamiclife.com / Admin@123
+            <p className="mt-0.5 leading-relaxed">
+              {lang === 'bn'
+                ? 'সার্ভার চালু করার সময় ADMIN_EMAIL ও ADMIN_PASSWORD এনভায়রনমেন্ট ভেরিয়েবল থেকে অ্যাডমিন অ্যাকাউন্ট তৈরি হয়। কোনো ডিফল্ট পাসওয়ার্ড নেই।'
+                : 'The admin account is provisioned from the ADMIN_EMAIL and ADMIN_PASSWORD environment variables when the server starts. There is no default password.'}
             </p>
           </div>
 

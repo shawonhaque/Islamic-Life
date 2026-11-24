@@ -2,9 +2,13 @@
 
 ## Build and verify
 
-- `npm run build` runs `scripts/build-quran.mjs` → `scripts/build-brand.mjs` → `vite build`.
+- `npm run build` runs `scripts/build-quran.mjs` → `scripts/build-brand.mjs` →
+  `scripts/build-seo.mjs` → `scripts/build-search-index.mjs` → `vite build`.
 - Deploy builds need `GITHUB_PAGES=true` so Vite emits `/Islamic-Life/` asset URLs.
 - `npx tsc --noEmit` is the only lint; there is no test runner in this repo.
+- To reproduce the deploy locally, serve `dist/` so unknown paths answer
+  `404.html` with HTTP 200. `python3 -m http.server` returns 404 instead, which
+  makes the app look broken in ways Pages never shows.
 - Verify UI changes with Playwright at a 1440px viewport. Headless Chromium
   needs `--use-gl=swiftshader --enable-unsafe-swiftshader` for the Three.js
   views, otherwise the canvas stays blank.
@@ -25,6 +29,12 @@
   the SPA shell with HTTP 200, so use `postJson` from `src/utils/safeFetch.ts`
   for server-only features; it raises `ApiUnavailableError` instead of failing
   on JSON parsing.
+- Call `hasBackendApi()` from `src/utils/backendApi.ts` before any raw
+  `fetch('/api/...')`. The static build sets `__HAS_BACKEND__` to false so the
+  probe is skipped entirely and no 404 is logged.
+- Every view is behind `React.lazy` in `App.tsx`, and `EarthGlobe` /
+  `QiblaGoogleMap` are lazy at their call sites so `three` and the Maps SDK
+  stay out of the entry chunk. Keep new heavy imports lazy.
 - Chat and audio transcription therefore have two paths: the express proxy
   when it exists, then `src/utils/geminiBrowser.ts` calling Gemini directly
   with a key the visitor saves in localStorage. Keep both in sync — persona
@@ -35,5 +45,13 @@
   pin real ones through `resolveModel`.
 - Quran data lives in `data/quran/*.json` (tracked, ~140MB) and is converted to
   `public/quran/` by the build script. Never edit `public/quran` by hand.
+- Tafsir `apiSlug` values in `src/data/islamicModulesData.ts` must match real
+  directories in `spa5k/tafsir_api`. A typo fails silently to bundled text, so
+  check a new slug with
+  `curl -o /dev/null -w '%{http_code}' https://cdn.jsdelivr.net/gh/spa5k/tafsir_api@main/tafsir/<slug>/1/1.json`.
+- `relative` and `fixed` are both `position` utilities, and `rounded-*` values
+  are mutually exclusive. Emitting both in a template literal leaves the
+  winner to stylesheet order — that is what collapsed the globe fullscreen
+  box to zero height. Pick one branch per property.
 - `SectionId` in `src/types/islamic.ts` drives routing in `src/App.tsx` and the
   nav lists in `SidebarNav.tsx` / `TopNav.tsx`; add a section in all four.

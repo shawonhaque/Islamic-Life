@@ -134,14 +134,9 @@ export function SidebarNav({
               height={40}
               className="w-10 h-10 rounded-xl shrink-0 shadow-xs"
             />
-            <div className="min-w-0">
-              <p className="text-[15px] font-bold text-[#1f2421] leading-tight truncate">
-                Islamic Life
-              </p>
-              <p className="text-[11px] text-[#6e7268] leading-tight mt-0.5 truncate">
-                {lang === 'bn' ? 'আজ · কুরআন · কিবলা' : 'Today · Quran · Qibla'}
-              </p>
-            </div>
+            <p className="text-[15px] font-bold text-[#1f2421] leading-tight truncate">
+              Islamic Life
+            </p>
           </button>
         </div>
 
@@ -308,12 +303,7 @@ export function SidebarNav({
                     <path d="M12.5 2.5a9.5 9.5 0 1 0 8.7 13.3 7.8 7.8 0 0 1-8.7-13.3Z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="font-bold text-sm text-[#1f2421]">Islamic Life</p>
-                  <p className="text-[11px] text-[#6e7268]">
-                    {lang === 'bn' ? 'আজ · কুরআন · কিবলা' : 'Today · Quran · Qibla'}
-                  </p>
-                </div>
+                <p className="font-bold text-sm text-[#1f2421]">Islamic Life</p>
               </div>
               <button
                 type="button"

@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import type { Ayah, Language, SurahDetailResponse } from '../types/islamic';
 import { safeReadJson } from '../utils/safeFetch';
+import { loadStaticSurah } from '../utils/quranData';
 import { cleanAyahArabic } from './QuranTafsirModal';
 
 export interface VerseImageTarget {
@@ -207,10 +208,14 @@ export function VerseImageModal({ open, lang, target, onClose }: VerseImageModal
     setLoadingSurah(true);
     fetch(`/api/surahs/${target.surahNumber}`)
       .then((res) => (res.ok ? safeReadJson<SurahDetailResponse>(res) : null))
-      .then((data) => {
-        if (cancelled || !data || !Array.isArray(data.ayahs)) return;
-        setSurahAyahs(data.ayahs);
-        setTotalAyahs(data.total_ayahs || data.ayahs.length || target.ayahNumber);
+      .then(async (data) => {
+        const ayahs =
+          Array.isArray(data?.ayahs) && data.ayahs.length
+            ? data.ayahs
+            : await loadStaticSurah(target.surahNumber);
+        if (cancelled || !ayahs) return;
+        setSurahAyahs(ayahs);
+        setTotalAyahs(data?.total_ayahs || ayahs.length || target.ayahNumber);
       })
       .catch(() => {
         // fallback cleanly to initial ayah payload

@@ -42,6 +42,7 @@ import {
   transliterateWordToEnglish,
 } from '../utils/arabicTransliteration';
 import { safeReadJson } from '../utils/safeFetch';
+import { loadStaticSurah } from '../utils/quranData';
 
 interface QuranPageProps {
   lang: Language;
@@ -180,13 +181,16 @@ export function QuranPage({ lang, surahs, ayahs, jumpTo }: QuranPageProps) {
 
     const promise = fetch(`/api/surahs/${surahNumber}`)
       .then((res) => (res.ok ? safeReadJson<SurahDetailResponse>(res).catch(() => null) : null))
-      .then((data: SurahDetailResponse | null) => {
-        if (!data || !Array.isArray(data.ayahs)) return null;
-        surahCacheRef.current.set(surahNumber, data.ayahs);
-        for (const a of data.ayahs) {
+      .then(async (data: SurahDetailResponse | null) => {
+        const ayahs = Array.isArray(data?.ayahs) && data.ayahs.length
+          ? data.ayahs
+          : await loadStaticSurah(surahNumber);
+        if (!ayahs) return null;
+        surahCacheRef.current.set(surahNumber, ayahs);
+        for (const a of ayahs) {
           ayahCacheRef.current.set(`${surahNumber}:${a.ayah_number}`, a);
         }
-        return data.ayahs;
+        return ayahs;
       })
       .finally(() => {
         inFlightSurahRef.current.delete(surahNumber);

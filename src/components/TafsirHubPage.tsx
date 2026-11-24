@@ -21,6 +21,7 @@ import type {
   TafsirViewTab,
 } from '../types/islamic';
 import { safeReadJson } from '../utils/safeFetch';
+import { readTafsir } from '../utils/tafsirReader';
 
 interface TafsirHubPageProps {
   lang: Language;
@@ -120,6 +121,14 @@ export function TafsirHubPage({ lang, surahs, onOpenInQuran }: TafsirHubPageProp
     }
   };
 
+  const readTafsirLocally = useCallback(
+    (editionId: string, surahNum: number, ayahNum: number) => {
+      const edition = TAFSIR_EDITIONS.find((e) => e.id === editionId) ?? TAFSIR_EDITIONS[0];
+      return readTafsir(edition, surahNum, ayahNum);
+    },
+    []
+  );
+
   const fetchEditionTafsir = useCallback(
     async (editionId: string, surahNum: number, ayahNum: number) => {
       setLoadingTafsir(true);
@@ -130,14 +139,16 @@ export function TafsirHubPage({ lang, surahs, onOpenInQuran }: TafsirHubPageProp
         if (res.ok) {
           const data = await safeReadJson<TafsirReadResponse>(res);
           setTafsirData(data);
+        } else {
+          setTafsirData(await readTafsirLocally(editionId, surahNum, ayahNum));
         }
       } catch {
-        // ignore network issues
+        setTafsirData(await readTafsirLocally(editionId, surahNum, ayahNum));
       } finally {
         setLoadingTafsir(false);
       }
     },
-    []
+    [readTafsirLocally]
   );
 
   useEffect(() => {

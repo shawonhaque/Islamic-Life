@@ -58,7 +58,7 @@ npm install
 npm run dev
 ```
 
-The dev server runs `server.ts` on <http://localhost:3000> and proxies Vite
+The dev server runs `server.ts` on [<http://localhost:3000>](https://shawonhaque.github.io/Islamic-Life/) and proxies Vite
 through it, so the AI endpoints and `/api/content` work locally.
 
 For AI features, copy `.env.example` to `.env.local` and set `GEMINI_API_KEY`.

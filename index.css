@@ -1,0 +1,153 @@
+@import "tailwindcss";
+
+:root {
+  --bg-canvas: #faf7f0;
+  --surface-card: #ffffff;
+  --surface-subtle: #f5efe0;
+  --primary: #0f5c43;
+  --primary-dark: #0a3f2e;
+  --gold: #b58328;
+  --gold-bright: #d4a84f;
+  --navy-sky: #10204c;
+  --text-main: #1f2421;
+  --text-muted: #6e7268;
+  --border-hairline: #ebe6da;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  font-family: 'Hind Siliguri', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-display {
+  font-family: 'Plus Jakarta Sans', 'Hind Siliguri', sans-serif;
+}
+
+.font-arabic {
+  font-family: 'Amiri', 'Traditional Arabic', serif;
+  direction: rtl;
+  line-height: 1.95;
+}
+
+.font-mono-tabular {
+  font-family: 'JetBrains Mono', monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.text-balance {
+  text-wrap: balance;
+}
+
+/* Deep celestial indigo gradient for the GetSunnah-style live countdown sky card */
+.celestial-sky-card {
+  background-color: #101f49;
+  background-image:
+    radial-gradient(1px 1px at 14% 22%, rgba(255, 255, 255, 0.45) 100%, transparent),
+    radial-gradient(1.2px 1.2px at 36% 18%, rgba(255, 255, 255, 0.35) 100%, transparent),
+    radial-gradient(1px 1px at 58% 34%, rgba(255, 255, 255, 0.4) 100%, transparent),
+    radial-gradient(1.3px 1.3px at 78% 24%, rgba(212, 168, 79, 0.55) 100%, transparent),
+    radial-gradient(1px 1px at 88% 58%, rgba(255, 255, 255, 0.35) 100%, transparent),
+    radial-gradient(1px 1px at 26% 68%, rgba(255, 255, 255, 0.3) 100%, transparent),
+    linear-gradient(155deg, #0d193d 0%, #162a61 52%, #1d3573 100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Theme Dark Support (toggled via Settings -> Appearance -> Theme) */
+html.theme-dark {
+  --bg-canvas: #121715;
+  --surface-card: #1a211e;
+  --surface-subtle: #222b27;
+  --text-main: #edf2ee;
+  --text-muted: #a6b3ab;
+  --border-hairline: #2d3833;
+}
+
+html.theme-dark body {
+  background-color: var(--bg-canvas);
+  color: var(--text-main);
+}
+
+html.theme-dark .bg-white {
+  background-color: #1a211e !important;
+}
+
+html.theme-dark .bg-\[\#faf7f0\],
+html.theme-dark .bg-\[\#fcfaf5\],
+html.theme-dark .bg-\[\#f7faf8\],
+html.theme-dark .bg-\[\#f8f5ec\],
+html.theme-dark .bg-\[\#f4f1e8\] {
+  background-color: #141a17 !important;
+}
+
+html.theme-dark .bg-\[\#f5efe0\],
+html.theme-dark .bg-\[\#f3ede0\],
+html.theme-dark .bg-\[\#eef5f0\] {
+  background-color: #212c27 !important;
+}
+
+html.theme-dark .border-\[\#ebe6da\],
+html.theme-dark .border-\[\#dce7e0\],
+html.theme-dark .border-\[\#f0ece1\],
+html.theme-dark .border-\[\#f2eee4\] {
+  border-color: #2d3833 !important;
+}
+
+html.theme-dark .text-\[\#1f2421\],
+html.theme-dark .text-\[\#183027\],
+html.theme-dark .text-\[\#2b302a\],
+html.theme-dark .text-\[\#3c413b\],
+html.theme-dark .text-\[\#494e45\] {
+  color: #e7ede9 !important;
+}
+
+html.theme-dark .text-\[\#6e7268\],
+html.theme-dark .text-\[\#5a7066\],
+html.theme-dark .text-\[\#8a8679\] {
+  color: #a3b1a8 !important;
+}
+
+/* Accent Color Overrides */
+html[data-accent="emerald"] .text-\[\#b58328\],
+html[data-accent="emerald"] .text-\[\#8f6319\] {
+  color: #087653 !important;
+}
+html[data-accent="sapphire"] .text-\[\#b58328\],
+html[data-accent="sapphire"] .text-\[\#8f6319\] {
+  color: #1d4ed8 !important;
+}
+html[data-accent="sapphire"] .bg-\[\#087653\],
+html[data-accent="sapphire"] .bg-\[\#0f5c43\] {
+  background-color: #1e40af !important;
+}
+html[data-accent="rose"] .text-\[\#b58328\],
+html[data-accent="rose"] .text-\[\#8f6319\] {
+  color: #be123c !important;
+}
+html[data-accent="rose"] .bg-\[\#087653\],
+html[data-accent="rose"] .bg-\[\#0f5c43\] {
+  background-color: #9f1239 !important;
+}
+

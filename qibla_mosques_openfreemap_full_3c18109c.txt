@@ -1,0 +1,1023 @@
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Info,
+  Compass,
+  MapPin,
+  Check,
+  X,
+  Search,
+  Phone,
+  Navigation,
+  Map as MapIcon,
+  Globe,
+  Layers,
+  Building2,
+  LocateFixed,
+  Clock,
+} from 'lucide-react';
+
+declare global {
+  interface Window {
+    maplibregl: any;
+  }
+}
+
+// Kaaba Coordinates (Makkah)
+const KAABA_LAT = 21.4225;
+const KAABA_LON = 39.8262;
+
+// Default Fallback Coordinates (Dhaka, Bangladesh)
+const DEFAULT_COORDS = {
+  lat: 23.7104,
+  lon: 90.4074,
+  city: 'Dhaka',
+};
+
+interface Mosque {
+  id: number;
+  name: string;
+  address: string;
+  lat: number;
+  lon: number;
+  distanceKm: number;
+  phone?: string;
+  jumuahTime?: string;
+  verified: boolean;
+}
+
+function toRadians(deg: number) {
+  return (deg * Math.PI) / 180;
+}
+
+function toDegrees(rad: number) {
+  return (rad * 180) / Math.PI;
+}
+
+function calculateDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRadians(lat1)) *
+      Math.cos(toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calculateQiblaData(lat: number, lon: number) {
+  const phi1 = toRadians(lat);
+  const phi2 = toRadians(KAABA_LAT);
+  const deltaLambda = toRadians(KAABA_LON - lon);
+
+  const y = Math.sin(deltaLambda) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+
+  let bearing = toDegrees(Math.atan2(y, x));
+  bearing = (bearing + 360) % 360;
+
+  const distanceKm = Math.round(calculateDistanceKm(lat, lon, KAABA_LAT, KAABA_LON));
+  const distanceMi = Math.round(distanceKm * 0.621371);
+
+  return {
+    bearing: Number(bearing.toFixed(1)),
+    distanceKm,
+    distanceMi,
+  };
+}
+
+function getCardinalDirection(deg: number) {
+  const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+  const index = Math.round(deg / 45) % 8;
+  return dirs[index];
+}
+
+export default function App() {
+  const [activeTab, setActiveTab] = useState<'mosques' | 'qibla'>('mosques');
+  const [location, setLocation] = useState(DEFAULT_COORDS);
+
+  // Qibla States
+  const [showTutorial, setShowTutorial] = useState(true);
+  const [qiblaData, setQiblaData] = useState(() =>
+    calculateQiblaData(DEFAULT_COORDS.lat, DEFAULT_COORDS.lon)
+  );
+  const [heading, setHeading] = useState<number | null>(null);
+  const [needsPermission, setNeedsPermission] = useState(false);
+  const [mockDemoAngle, setMockDemoAngle] = useState(62);
+  const hasBuzzedRef = useRef(false);
+
+  // Mosques & OpenFreeMap States
+  const [mosques, setMosques] = useState<Mosque[]>([]);
+  const [loadingMosques, setLoadingMosques] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState<'all' | 'jumuah' | 'phone'>('all');
+  const [selectedMosqueId, setSelectedMosqueId] = useState<number | null>(null);
+  const [mapStyleMode, setMapStyleMode] = useState<'liberty' | 'positron' | 'earth'>('liberty');
+  const [is3DBuildings, setIs3DBuildings] = useState(true);
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapInstanceRef = useRef<any>(null);
+  const markersRef = useRef<any[]>([]);
+
+  // Animate Tutorial Phone Arrow
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMockDemoAngle((prev) => (prev === 62 ? 0 : 62));
+    }, 2200);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Load MapLibre GL JS dynamically via CDN
+  useEffect(() => {
+    if (window.maplibregl) {
+      setMapLoaded(true);
+      return;
+    }
+
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css';
+    document.head.appendChild(link);
+
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js';
+    script.async = true;
+    script.onload = () => setMapLoaded(true);
+    document.head.appendChild(script);
+  }, []);
+
+  // Fetch Live GPS Location
+  const detectUserGPS = () => {
+    if (!('geolocation' in navigator)) return;
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setQiblaData(calculateQiblaData(latitude, longitude));
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`
+          );
+          const data = await res.json();
+          const cityName =
+            data.address?.city ||
+            data.address?.town ||
+            data.address?.suburb ||
+            data.address?.state ||
+            'Current Location';
+          setLocation({ lat: latitude, lon: longitude, city: cityName });
+        } catch {
+          setLocation({ lat: latitude, lon: longitude, city: 'Current Location' });
+        }
+      },
+      () => {
+        // Keep Dhaka fallback if GPS denied
+      }
+    );
+  };
+
+  useEffect(() => {
+    detectUserGPS();
+  }, []);
+
+  // Fetch Live Nearby Mosques from OpenStreetMap Overpass API
+  useEffect(() => {
+    const fetchMosques = async () => {
+      setLoadingMosques(true);
+      try {
+        const radius = 3500; // 3.5km radius
+        const query = `
+          [out:json][timeout:25];
+          (
+            node["amenity"="place_of_worship"]["religion"="muslim"](around:${radius},${location.lat},${location.lon});
+            way["amenity"="place_of_worship"]["religion"="muslim"](around:${radius},${location.lat},${location.lon});
+          );
+          out center;
+        `;
+        const res = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          body: query,
+        });
+        const data = await res.json();
+
+        const parsed: Mosque[] = (data.elements || [])
+          .map((el: any) => {
+            const mLat = el.lat || el.center?.lat;
+            const mLon = el.lon || el.center?.lon;
+            if (!mLat || !mLon) return null;
+
+            const tags = el.tags || {};
+            const name =
+              tags['name:en'] || tags.name || tags['name:bn'] || 'Local Jame Masjid';
+            const street =
+              tags['addr:full'] ||
+              [tags['addr:housenumber'], tags['addr:street'], tags['addr:suburb']]
+                .filter(Boolean)
+                .join(', ') ||
+              location.city;
+            const phone = tags.phone || tags['contact:phone'] || undefined;
+            const jumuahTime = tags['service_times:jumuah'] || tags['jumuah'] || undefined;
+            const dist = calculateDistanceKm(location.lat, location.lon, mLat, mLon);
+
+            return {
+              id: el.id,
+              name,
+              address: street,
+              lat: mLat,
+              lon: mLon,
+              distanceKm: Number(dist.toFixed(1)),
+              phone,
+              jumuahTime,
+              verified: Boolean(tags.name && (tags['addr:street'] || phone)),
+            };
+          })
+          .filter(Boolean)
+          .sort((a: Mosque, b: Mosque) => a.distanceKm - b.distanceKm);
+
+        setMosques(parsed);
+      } catch (error) {
+        console.error('Error fetching mosques:', error);
+      } finally {
+        setLoadingMosques(false);
+      }
+    };
+
+    fetchMosques();
+  }, [location.lat, location.lon]);
+
+  // Get Map Style Configuration (OpenFreeMap & Earth Satellite)
+  const getMapStyle = (mode: 'liberty' | 'positron' | 'earth') => {
+    if (mode === 'liberty') {
+      return 'https://tiles.openfreemap.org/styles/liberty';
+    }
+    if (mode === 'positron') {
+      return 'https://tiles.openfreemap.org/styles/positron';
+    }
+    // Earth Satellite View with OpenFreeMap Attribution
+    return {
+      version: 8,
+      sources: {
+        satellite: {
+          type: 'raster',
+          tiles: [
+            'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+          ],
+          tileSize: 256,
+          attribution:
+            'OpenFreeMap © OpenMapTiles · Data from OpenStreetMap · Imagery © Esri',
+        },
+      },
+      layers: [
+        {
+          id: 'satellite-layer',
+          type: 'raster',
+          source: 'satellite',
+          minzoom: 0,
+          maxzoom: 19,
+        },
+      ],
+    };
+  };
+
+  // Initialize & Update MapLibre GL JS Map
+  useEffect(() => {
+    if (!mapLoaded || activeTab !== 'mosques' || !mapContainerRef.current) return;
+
+    const maplibregl = window.maplibregl;
+    if (!maplibregl) return;
+
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+
+    const map = new maplibregl.Map({
+      container: mapContainerRef.current,
+      style: getMapStyle(mapStyleMode),
+      center: [location.lon, location.lat],
+      zoom: 15,
+      pitch: is3DBuildings ? 50 : 0,
+      bearing: -15,
+      antialias: true,
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), 'top-right');
+
+    map.on('style.load', () => {
+      // Enable Google Earth-style 3D Globe projection when zoomed out
+      if (map.setProjection) {
+        map.setProjection({ type: 'globe' });
+      }
+    });
+
+    // User Blue Pulsing Marker
+    const userEl = document.createElement('div');
+    userEl.innerHTML = `
+      <div style="width:18px;height:18px;background:#2563EB;border:3px solid #FFFFFF;border-radius:50%;box-shadow:0 0 12px rgba(37,99,235,0.7);"></div>
+    `;
+    new maplibregl.Marker({ element: userEl })
+      .setLngLat([location.lon, location.lat])
+      .setPopup(new maplibregl.Popup({ offset: 15 }).setHTML('<b>Your Location</b>'))
+      .addTo(map);
+
+    mapInstanceRef.current = map;
+
+    return () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
+    };
+  }, [mapLoaded, activeTab, mapStyleMode, location.lat, location.lon]);
+
+  // Toggle 3D Pitch smoothly
+  useEffect(() => {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.easeTo({
+        pitch: is3DBuildings ? 50 : 0,
+        duration: 600,
+      });
+    }
+  }, [is3DBuildings]);
+
+  // Plot Gold Mosque Pins on MapLibre
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    const maplibregl = window.maplibregl;
+    if (!map || !maplibregl) return;
+
+    markersRef.current.forEach((m) => m.remove());
+    markersRef.current = [];
+
+    mosques.forEach((m) => {
+      const el = document.createElement('div');
+      const isSelected = m.id === selectedMosqueId;
+      el.style.cursor = 'pointer';
+      el.innerHTML = `
+        <div style="
+          width: ${isSelected ? '34px' : '28px'};
+          height: ${isSelected ? '34px' : '28px'};
+          background: ${isSelected ? '#8C6218' : '#FFFFFF'};
+          border: 2.5px solid #8C6218;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+          font-size: 14px;
+          transition: all 0.2s;
+        ">
+          🕌
+        </div>
+      `;
+
+      const popupHtml = `
+        <div style="font-family:sans-serif;padding:4px;max-width:210px;">
+          <div style="font-weight:700;font-size:13px;color:#1C1B18;">${m.name}</div>
+          <div style="font-size:11px;color:#6E6A63;margin-top:2px;">${m.address}</div>
+          <div style="font-size:11px;font-weight:600;color:#8C6218;margin-top:4px;">${m.distanceKm} km away</div>
+          <a href="https://www.google.com/maps/dir/?api=1&destination=${m.lat},${m.lon}" target="_blank" style="display:inline-block;margin-top:6px;font-size:11px;color:#2563EB;text-decoration:underline;">Get Directions →</a>
+        </div>
+      `;
+
+      const marker = new maplibregl.Marker({ element: el })
+        .setLngLat([m.lon, m.lat])
+        .setPopup(new maplibregl.Popup({ offset: 18 }).setHTML(popupHtml))
+        .addTo(map);
+
+      el.addEventListener('click', () => {
+        setSelectedMosqueId(m.id);
+      });
+
+      markersRef.current.push(marker);
+    });
+  }, [mosques, selectedMosqueId, mapStyleMode, activeTab]);
+
+  // Fly to Mosque when clicked in Sidebar
+  const handleSelectMosqueOnMap = (mosque: Mosque) => {
+    setSelectedMosqueId(mosque.id);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo({
+        center: [mosque.lon, mosque.lat],
+        zoom: 17,
+        pitch: is3DBuildings ? 55 : 0,
+        duration: 1200,
+      });
+    }
+  };
+
+  // Compass Orientation Sensor Listener
+  useEffect(() => {
+    if (
+      typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof (DeviceOrientationEvent as any).requestPermission === 'function'
+    ) {
+      setNeedsPermission(true);
+    }
+
+    const handleOrientation = (event: any) => {
+      let currentHeading: number | null = null;
+      if (typeof event.webkitCompassHeading === 'number') {
+        currentHeading = event.webkitCompassHeading;
+      } else if (typeof event.alpha === 'number') {
+        currentHeading = (360 - event.alpha) % 360;
+      }
+
+      if (currentHeading !== null && !isNaN(currentHeading)) {
+        setHeading(currentHeading);
+        setNeedsPermission(false);
+      }
+    };
+
+    window.addEventListener('deviceorientationabsolute', handleOrientation, true);
+    window.addEventListener('deviceorientation', handleOrientation, true);
+
+    return () => {
+      window.removeEventListener('deviceorientationabsolute', handleOrientation, true);
+      window.removeEventListener('deviceorientation', handleOrientation, true);
+    };
+  }, []);
+
+  const requestIOSCompass = async () => {
+    try {
+      const response = await (DeviceOrientationEvent as any).requestPermission();
+      if (response === 'granted') {
+        setNeedsPermission(false);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Qibla Alignment Calculation
+  let relativeAngle = 0;
+  let isAligned = false;
+
+  if (heading !== null) {
+    relativeAngle = (qiblaData.bearing - heading + 360) % 360;
+    if (relativeAngle > 180) relativeAngle -= 360;
+    isAligned = Math.abs(relativeAngle) <= 4;
+
+    if (isAligned && !hasBuzzedRef.current) {
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(120);
+      }
+      hasBuzzedRef.current = true;
+    } else if (!isAligned) {
+      hasBuzzedRef.current = false;
+    }
+  }
+
+  // Filtered Mosques List
+  const filteredMosques = mosques.filter((m) => {
+    const matchesSearch =
+      m.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      m.address.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!matchesSearch) return false;
+    if (filterType === 'phone') return Boolean(m.phone);
+    if (filterType === 'jumuah') return Boolean(m.jumuahTime);
+    return true;
+  });
+
+  const cardinalDir = getCardinalDirection(qiblaData.bearing);
+
+  return (
+    <div className="min-h-screen bg-[#F7F5F0] text-[#1C1B18] flex flex-col font-sans">
+      {/* Top Navigation Bar */}
+      <nav className="bg-white border-b border-[#E6E2D8] px-4 sm:px-8 py-3 flex items-center justify-between sticky top-0 z-30">
+        <div className="flex items-center bg-[#F7F5F0] p-1 rounded-xl border border-[#E6E2D8]">
+          <button
+            onClick={() => setActiveTab('mosques')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'mosques'
+                ? 'bg-[#8C6218] text-white shadow-2xs'
+                : 'text-[#6E6A63] hover:text-[#1C1B18]'
+            }`}
+          >
+            <MapPin className="w-3.5 h-3.5" />
+            Live Mosques
+          </button>
+          <button
+            onClick={() => setActiveTab('qibla')}
+            className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer flex items-center gap-1.5 ${
+              activeTab === 'qibla'
+                ? 'bg-[#8C6218] text-white shadow-2xs'
+                : 'text-[#6E6A63] hover:text-[#1C1B18]'
+            }`}
+          >
+            <Compass className="w-3.5 h-3.5" />
+            Qibla Compass
+          </button>
+        </div>
+
+        <button
+          onClick={detectUserGPS}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold bg-[#F7F5F0] hover:bg-[#EDE9DF] text-[#1C1B18] px-3 py-1.5 rounded-full border border-[#E6E2D8] cursor-pointer"
+        >
+          <LocateFixed className="w-3.5 h-3.5 text-[#8C6218]" />
+          {location.city}
+        </button>
+      </nav>
+
+      {/* TAB 1: LIVE MOSQUES FINDER (OpenFreeMap + Earth 3D View) */}
+      {activeTab === 'mosques' && (
+        <div className="flex-1 flex flex-col md:flex-row h-[calc(100vh-57px)] overflow-hidden">
+          {/* Left Sidebar */}
+          <aside className="w-full md:w-[410px] bg-[#F7F5F0] border-r border-[#E6E2D8] flex flex-col h-1/2 md:h-full">
+            <div className="p-5 pb-3">
+              <h1 className="text-2xl font-bold text-[#1C1B18]">Mosques</h1>
+              <p className="text-xs text-[#6E6A63] mt-0.5">
+                Near {location.city} · {filteredMosques.length} mosques
+              </p>
+
+              {/* Search Bar */}
+              <div className="relative mt-3.5">
+                <Search className="w-4 h-4 text-[#8C877E] absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Search mosques by name or street"
+                  className="w-full bg-white border border-[#E6E2D8] rounded-xl pl-10 pr-4 py-2.5 text-xs text-[#1C1B18] placeholder-[#8C877E] focus:outline-none focus:border-[#8C6218]"
+                />
+              </div>
+
+              {/* Filter Pills */}
+              <div className="flex items-center gap-2 mt-3 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setFilterType('all')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition ${
+                    filterType === 'all'
+                      ? 'bg-[#8C6218] text-white'
+                      : 'bg-white border border-[#E6E2D8] text-[#4A463F]'
+                  }`}
+                >
+                  🕌 All
+                </button>
+                <button
+                  onClick={() => setFilterType('jumuah')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition flex items-center gap-1 ${
+                    filterType === 'jumuah'
+                      ? 'bg-[#8C6218] text-white'
+                      : 'bg-white border border-[#E6E2D8] text-[#4A463F]'
+                  }`}
+                >
+                  <Clock className="w-3 h-3" /> Has Jumu'ah time
+                </button>
+                <button
+                  onClick={() => setFilterType('phone')}
+                  className={`px-3 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap cursor-pointer transition flex items-center gap-1 ${
+                    filterType === 'phone'
+                      ? 'bg-[#8C6218] text-white'
+                      : 'bg-white border border-[#E6E2D8] text-[#4A463F]'
+                  }`}
+                >
+                  <Phone className="w-3 h-3" /> Has phone
+                </button>
+              </div>
+            </div>
+
+            {/* Scrollable Mosque Cards List */}
+            <div className="flex-1 overflow-y-auto px-5 pb-6 space-y-3">
+              {loadingMosques ? (
+                <div className="text-center py-10 text-xs text-[#6E6A63]">
+                  Finding nearby mosques from OpenStreetMap...
+                </div>
+              ) : filteredMosques.length === 0 ? (
+                <div className="text-center py-10 text-xs text-[#6E6A63]">
+                  No mosques found matching your filter.
+                </div>
+              ) : (
+                filteredMosques.map((mosque) => (
+                  <div
+                    key={mosque.id}
+                    onClick={() => handleSelectMosqueOnMap(mosque)}
+                    className={`bg-white rounded-xl p-4 border transition cursor-pointer ${
+                      selectedMosqueId === mosque.id
+                        ? 'border-[#8C6218] shadow-sm'
+                        : 'border-[#E6E2D8] hover:border-[#C9C2B4]'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-sm text-[#1C1B18] leading-snug">
+                          {mosque.name}
+                        </h3>
+                        <p className="text-xs text-[#6E6A63] mt-0.5">
+                          {mosque.address}
+                        </p>
+                      </div>
+                      <span className="bg-[#F3EDE2] text-[#8C6218] text-[11px] font-bold px-2.5 py-0.5 rounded-full shrink-0">
+                        {mosque.distanceKm} km
+                      </span>
+                    </div>
+
+                    <p className="text-[11px] text-[#8C877E] mt-2">
+                      Jumu'ah{' '}
+                      <span className="italic">
+                        {mosque.jumuahTime || 'Not added yet'}
+                      </span>
+                    </p>
+
+                    {/* Card Action Buttons */}
+                    <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-[#F3EFE6]">
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${mosque.lat},${mosque.lon}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 bg-[#F7F5F0] hover:bg-[#EFECE4] text-[#3D3A35] text-[11px] font-semibold px-2.5 py-1.5 rounded-lg"
+                        >
+                          <Navigation className="w-3 h-3 text-[#8C6218]" />
+                          Directions
+                        </a>
+
+                        {mosque.phone && (
+                          <a
+                            href={`tel:${mosque.phone}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="inline-flex items-center gap-1 bg-[#F7F5F0] hover:bg-[#EFECE4] text-[#3D3A35] text-[11px] font-semibold px-2.5 py-1.5 rounded-lg"
+                          >
+                            <Phone className="w-3 h-3 text-[#8C6218]" />
+                            Call
+                          </a>
+                        )}
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleSelectMosqueOnMap(mosque);
+                          }}
+                          className="inline-flex items-center gap-1 bg-[#F7F5F0] hover:bg-[#EFECE4] text-[#3D3A35] text-[11px] font-semibold px-2.5 py-1.5 rounded-lg cursor-pointer"
+                        >
+                          <MapIcon className="w-3 h-3 text-[#8C6218]" />
+                          Map
+                        </button>
+                      </div>
+
+                      {!mosque.verified && (
+                        <span className="text-[10px] text-[#9E998F]">
+                          Unconfirmed listing
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </aside>
+
+          {/* Right Map Container (OpenFreeMap + Google Earth 3D Mode) */}
+          <section className="flex-1 relative h-1/2 md:h-full bg-[#EAE6DD]">
+            {/* Map Layer Switcher Controls */}
+            <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1.5 bg-white/95 backdrop-blur-xs p-1.5 rounded-xl border border-[#E6E2D8] shadow-sm">
+              <button
+                onClick={() => setMapStyleMode('liberty')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition ${
+                  mapStyleMode === 'liberty'
+                    ? 'bg-[#8C6218] text-white'
+                    : 'text-[#4A463F] hover:bg-[#F7F5F0]'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                OpenFreeMap
+              </button>
+
+              <button
+                onClick={() => setMapStyleMode('positron')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition ${
+                  mapStyleMode === 'positron'
+                    ? 'bg-[#8C6218] text-white'
+                    : 'text-[#4A463F] hover:bg-[#F7F5F0]'
+                }`}
+              >
+                Light Map
+              </button>
+
+              <button
+                onClick={() => setMapStyleMode('earth')}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition ${
+                  mapStyleMode === 'earth'
+                    ? 'bg-[#8C6218] text-white'
+                    : 'text-[#4A463F] hover:bg-[#F7F5F0]'
+                }`}
+              >
+                <Globe className="w-3.5 h-3.5" />
+                Earth Satellite
+              </button>
+
+              <button
+                onClick={() => setIs3DBuildings(!is3DBuildings)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border cursor-pointer transition ${
+                  is3DBuildings
+                    ? 'border-[#8C6218] text-[#8C6218] bg-[#F3EDE2]'
+                    : 'border-[#E6E2D8] text-[#6E6A63]'
+                }`}
+              >
+                <Building2 className="w-3.5 h-3.5" />
+                3D View
+              </button>
+            </div>
+
+            {/* MapLibre GL Canvas */}
+            <div ref={mapContainerRef} className="w-full h-full" />
+
+            {/* Attribution Badge */}
+            <div className="absolute bottom-2 left-2 z-10 bg-white/90 px-2.5 py-1 rounded-md text-[10px] text-[#4A463F] border border-[#E6E2D8]">
+              OpenFreeMap © OpenMapTiles · Data from OpenStreetMap
+            </div>
+          </section>
+        </div>
+      )}
+
+      {/* TAB 2: QIBLA COMPASS (Exact 1st Image Minimal Design + Real-Time Auto Rotation) */}
+      {activeTab === 'qibla' && (
+        <div className="max-w-4xl w-full mx-auto py-8 px-4 sm:px-6">
+          <header className="mb-6">
+            <h1 className="text-3xl font-bold tracking-tight text-[#1C1B18]">
+              Qibla
+            </h1>
+            <p className="text-sm text-[#6E6A63] mt-0.5">{location.city}</p>
+          </header>
+
+          {/* Collapsible "Finding the Qibla" Tutorial Card */}
+          {showTutorial && (
+            <section className="bg-white rounded-2xl border border-[#E6E2D8] shadow-sm p-6 sm:p-8 mb-10">
+              <h2 className="text-center text-lg font-bold text-[#1C1B18] mb-6">
+                Finding the Qibla
+              </h2>
+
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-center">
+                {/* Left Phone Illustration */}
+                <div className="md:col-span-5 flex items-center justify-center gap-5">
+                  <div className="flex flex-col gap-7 items-center">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-11 h-2 bg-[#2B303A] rounded-full border-t-2 border-teal-400" />
+                      <Check className="w-4 h-4 text-[#16A34A] stroke-[3]" />
+                    </div>
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2 h-11 bg-gray-400 rounded-full" />
+                      <X className="w-4 h-4 text-red-500 stroke-[3]" />
+                    </div>
+                  </div>
+
+                  {/* Animated Mock Phone */}
+                  <div className="w-40 h-56 bg-[#F3EFE6] border-2 border-[#D5CFC2] rounded-3xl p-3 flex flex-col items-center justify-between shadow-inner">
+                    <div className="w-9 h-1 bg-[#B8B2A6] rounded-full" />
+
+                    <div className="w-28 h-28 bg-white rounded-full border border-[#D5CFC2] relative flex items-center justify-center">
+                      <span className="absolute top-1 text-[9px] font-bold text-red-500">
+                        N
+                      </span>
+                      <span className="absolute bottom-1 text-[9px] font-bold text-gray-400">
+                        S
+                      </span>
+                      <span className="absolute right-1.5 text-[9px] font-bold text-gray-400">
+                        E
+                      </span>
+                      <span className="absolute left-1.5 text-[9px] font-bold text-gray-400">
+                        W
+                      </span>
+
+                      <div
+                        className="w-full h-full absolute inset-0 transition-transform duration-1000 ease-in-out"
+                        style={{ transform: `rotate(${mockDemoAngle}deg)` }}
+                      >
+                        <div className="absolute top-2.5 left-1/2 -translate-x-1/2 text-xs">
+                          🕋
+                        </div>
+                        <div
+                          className={`w-1 h-11 mx-auto mt-6 rounded-full transition-colors duration-500 ${
+                            mockDemoAngle === 0 ? 'bg-[#16A34A]' : 'bg-[#8C6218]'
+                          }`}
+                        />
+                      </div>
+                    </div>
+
+                    <span className="text-[11px] font-semibold text-[#1C1B18]">
+                      {mockDemoAngle === 0
+                        ? "You're facing Qibla"
+                        : `Turn right ${mockDemoAngle}°`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Right 3 Steps */}
+                <div className="md:col-span-7 flex flex-col gap-4">
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[#F3EDE2] text-[#8C6218] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                      1
+                    </span>
+                    <p className="text-sm text-[#3D3A35] leading-relaxed">
+                      Hold your phone flat in front of you, screen up, like a tray.
+                      Keep it away from metal, magnets and magnetic cases.
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[#F3EDE2] text-[#8C6218] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                      2
+                    </span>
+                    <p className="text-sm text-[#3D3A35] leading-relaxed">
+                      The gold arrow always points to the Kaaba. Turn your whole
+                      body slowly, the way the screen tells you.
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-3">
+                    <span className="w-6 h-6 rounded-full bg-[#F3EDE2] text-[#8C6218] font-bold text-xs flex items-center justify-center shrink-0 mt-0.5">
+                      3
+                    </span>
+                    <p className="text-sm text-[#3D3A35] leading-relaxed">
+                      When the arrow points straight up to the top of your phone,
+                      it turns green and the phone buzzes. You're facing the Qibla.
+                    </p>
+                  </div>
+
+                  <div className="bg-[#F7F5F0] rounded-xl px-4 py-3 flex items-center gap-3 text-xs text-[#6E6A63] mt-1">
+                    <span className="text-xl font-bold text-[#8C6218] leading-none">
+                      ∞
+                    </span>
+                    <span>
+                      Arrow jumping around? Step away from metal and move your
+                      phone in a figure-8 a few times.
+                    </span>
+                  </div>
+
+                  <div className="mt-2">
+                    <button
+                      onClick={() => setShowTutorial(false)}
+                      className="bg-[#8C6218] hover:bg-[#734F12] text-white font-semibold text-sm px-14 py-3 rounded-xl transition-colors cursor-pointer"
+                    >
+                      Got it
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {/* Main 2-Column Compass & Metrics Area */}
+          <main className="grid grid-cols-1 md:grid-cols-12 gap-10 items-center">
+            {/* Left Column: 2D Live Compass Dial */}
+            <div className="md:col-span-5 flex justify-center">
+              <div className="w-72 h-72 bg-white rounded-full border border-[#DCD7CC] shadow-sm relative flex items-center justify-center">
+                <div
+                  className="w-full h-full relative transition-transform duration-150 ease-out"
+                  style={{
+                    transform:
+                      heading !== null ? `rotate(${-heading}deg)` : 'rotate(0deg)',
+                  }}
+                >
+                  {Array.from({ length: 36 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="absolute inset-0"
+                      style={{ transform: `rotate(${i * 10}deg)` }}
+                    >
+                      <div
+                        className={`mx-auto ${
+                          i % 9 === 0
+                            ? 'w-0.5 h-2.5 bg-gray-400'
+                            : 'w-[1px] h-1.5 bg-gray-300'
+                        }`}
+                      />
+                    </div>
+                  ))}
+
+                  <span className="absolute top-3.5 left-1/2 -translate-x-1/2 text-xs font-bold text-red-600">
+                    N
+                  </span>
+                  <span className="absolute bottom-3.5 left-1/2 -translate-x-1/2 text-xs font-bold text-[#6E6A63]">
+                    S
+                  </span>
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6E6A63]">
+                    E
+                  </span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs font-bold text-[#6E6A63]">
+                    W
+                  </span>
+
+                  <div className="absolute top-8 bottom-1/2 left-1/2 -translate-x-1/2 border-l border-dashed border-gray-300" />
+
+                  <div
+                    className="w-full h-full absolute inset-0 transition-transform duration-200"
+                    style={{ transform: `rotate(${qiblaData.bearing}deg)` }}
+                  >
+                    <div className="absolute top-5 left-1/2 -translate-x-1/2 text-lg select-none">
+                      🕋
+                    </div>
+
+                    <div
+                      className={`w-0 h-0 mx-auto mt-11 border-l-[12px] border-l-transparent border-r-[12px] border-r-transparent border-b-[20px] transition-colors duration-300 ${
+                        isAligned ? 'border-b-[#16A34A]' : 'border-b-[#8C6218]'
+                      }`}
+                    />
+
+                    <div
+                      className={`w-2 h-20 mx-auto -mt-0.5 rounded-b-full transition-colors duration-300 ${
+                        isAligned ? 'bg-[#16A34A]' : 'bg-[#8C6218]'
+                      }`}
+                    />
+                  </div>
+                </div>
+
+                <div
+                  className={`w-3.5 h-3.5 rounded-full z-10 transition-colors duration-300 ${
+                    isAligned ? 'bg-[#16A34A]' : 'bg-[#8C6218]'
+                  }`}
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Live Status & Metric Cards */}
+            <div className="md:col-span-7 text-center md:text-left">
+              {heading === null ? (
+                <h2 className="text-xl sm:text-2xl font-bold text-[#1C1B18] leading-snug mb-4">
+                  Live compass is not available on this device. Face{' '}
+                  {qiblaData.bearing}° ({cardinalDir}) clockwise from true North.
+                </h2>
+              ) : isAligned ? (
+                <h2 className="text-2xl font-bold text-[#16A34A] leading-snug mb-4">
+                  You're facing the Qibla
+                </h2>
+              ) : (
+                <h2 className="text-2xl font-bold text-[#1C1B18] leading-snug mb-4">
+                  {relativeAngle > 0
+                    ? `Turn right ${Math.round(Math.abs(relativeAngle))}°`
+                    : `Turn left ${Math.round(Math.abs(relativeAngle))}°`}
+                </h2>
+              )}
+
+              <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 mb-4">
+                <button
+                  onClick={() => setShowTutorial(true)}
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-[#1C1B18] border border-[#E6E2D8] rounded-full px-4 py-1.5 text-xs font-semibold shadow-2xs cursor-pointer"
+                >
+                  <Info className="w-3.5 h-3.5 text-[#8C6218]" />
+                  How to use
+                </button>
+
+                {needsPermission && (
+                  <button
+                    onClick={requestIOSCompass}
+                    className="inline-flex items-center gap-1.5 bg-[#8C6218] text-white rounded-full px-4 py-1.5 text-xs font-semibold shadow-2xs cursor-pointer"
+                  >
+                    <Compass className="w-3.5 h-3.5" />
+                    Enable Live Compass
+                  </button>
+                )}
+
+                <button
+                  onClick={() => setActiveTab('mosques')}
+                  className="inline-flex items-center gap-1.5 bg-white hover:bg-gray-50 text-[#1C1B18] border border-[#E6E2D8] rounded-full px-4 py-1.5 text-xs font-semibold shadow-2xs cursor-pointer"
+                >
+                  <MapPin className="w-3.5 h-3.5 text-[#8C6218]" />
+                  Nearby Mosques
+                </button>
+              </div>
+
+              <p className="text-xs text-[#6E6A63] mb-6">
+                {heading === null
+                  ? 'Open this page on your phone for a live compass, or use the angle above.'
+                  : 'Hold phone flat. The arrow turns green and buzzes when aligned with the Kaaba.'}
+              </p>
+
+              <div className="grid grid-cols-2 gap-4 text-left">
+                <div className="bg-white rounded-xl border border-[#E6E2D8] p-4 sm:p-5">
+                  <div className="text-xs text-[#6E6A63] mb-1">
+                    Qibla direction
+                  </div>
+                  <div className="text-2xl font-bold text-[#1C1B18]">
+                    {qiblaData.bearing}°
+                  </div>
+                  <div className="text-[11px] text-[#6E6A63] mt-0.5">
+                    {cardinalDir} · clockwise from true north
+                  </div>
+                </div>
+
+                <div className="bg-white rounded-xl border border-[#E6E2D8] p-4 sm:p-5">
+                  <div className="text-xs text-[#6E6A63] mb-1">
+                    Distance to the Kaaba
+                  </div>
+                  <div className="text-2xl font-bold text-[#1C1B18]">
+                    {qiblaData.distanceKm.toLocaleString()}
+                  </div>
+                  <div className="text-[11px] text-[#6E6A63] mt-0.5">
+                    km · {qiblaData.distanceMi.toLocaleString()} mi
+                  </div>
+                </div>
+              </div>
+            </div>
+          </main>
+        </div>
+      )}
+    </div>
+  );
+}

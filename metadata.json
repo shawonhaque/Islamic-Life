@@ -1,0 +1,6 @@
+{
+  "name": "Islamic Life",
+  "description": "Islamic Life — Namaj Shikkha, Holy Quran, Sahih Hadith, Duas, Prayer Times, Qibla, Tasbih, Zakat, Ramadan, Hijri Calendar & Interactive 3D Terrarium Sanctuary.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

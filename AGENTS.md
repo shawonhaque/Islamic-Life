@@ -62,6 +62,20 @@
   Authorized domains, or point the build at another project with
   `VITE_FIREBASE_*` (see `.env.example` and the secrets in `deploy.yml`).
   `src/lib/firebase.ts` merges those overrides over the committed JSON.
+- The mosque finder (`MosqueFinderPage` → `MosqueMap` + `src/utils/mosqueData.ts`)
+  is the only Leaflet surface. Keep `leaflet` and `leaflet.markercluster` lazy:
+  the CSS imports alone add ~17 kB, so the page stays behind `React.lazy`.
+  Public Overpass mirrors answer 502 "at capacity" for minutes at a time, so
+  `fetchMosquesNear` tries three mirrors with a 12 s bound each and falls back
+  to the seed list. Do not raise that without a visible loading state.
+- Leaflet measures its container on `L.map()`. If the element is not laid out
+  yet, the map keeps a zero size and every marker lands off-screen — this is
+  what made the map look empty at 390 px while the list still rendered. The
+  component now observes its container with `ResizeObserver` and calls
+  `invalidateSize()`, and it fits bounds to the markers once.
+- A phone viewport at zoom 13 spans only a few kilometres. Never assume the
+  default zoom shows markers spread across a city; fit bounds or cluster.
+
 - A Gemini key can list models and still fail generation with 403 when its
   project has no billing. `describeGeminiError` distinguishes that from a
   referrer restriction, so do not assume 403 means the key is browser-blocked.

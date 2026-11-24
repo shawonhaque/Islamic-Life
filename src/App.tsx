@@ -30,6 +30,9 @@ const TafsirHubPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import('./components/SettingsPage').then((m) => ({ default: m.SettingsPage }))
 );
+const MosqueFinderPage = lazy(() =>
+  import('./components/MosqueFinderPage').then((m) => ({ default: m.MosqueFinderPage }))
+);
 const EarthGlobe = lazy(() =>
   import('./components/EarthGlobe').then((m) => ({ default: m.EarthGlobe }))
 );
@@ -381,6 +384,12 @@ export default function App() {
           )}
 
           {activeSection === 'knowledge' && <KnowledgeHubPage lang={lang} />}
+
+          {activeSection === 'mosque-finder' && (
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <MosqueFinderPage lang={lang} />
+            </Suspense>
+          )}
 
           {activeSection === 'search' && (
             <GlobalSearchPage

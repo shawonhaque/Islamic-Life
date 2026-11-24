@@ -13,6 +13,7 @@ const NAV_ITEMS: Array<{ id: SectionId; bn: string; en: string }> = [
   { id: 'quran', bn: 'কুরআন', en: 'Quran' },
   { id: 'namaz', bn: 'নামাজ', en: 'Namaz' },
   { id: 'knowledge', bn: 'জ্ঞানকোষ', en: 'Knowledge' },
+  { id: 'mosque-finder', bn: 'মসজিদ', en: 'Mosques' },
   { id: 'hadith', bn: 'হাদিস ও দোয়া', en: 'Hadith & Dua' },
   { id: 'prayer-time', bn: 'ইসলামিক টুলস', en: 'Tools' },
 ];

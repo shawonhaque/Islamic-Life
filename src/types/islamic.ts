@@ -18,6 +18,7 @@ export type SectionId =
   | 'names-99'
   | 'terrarium'
   | 'knowledge'
+  | 'mosque-finder'
   | 'arabic-learning'
   | 'ai-studio'
   | 'settings'

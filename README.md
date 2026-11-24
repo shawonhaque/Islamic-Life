@@ -60,6 +60,7 @@ progress follow you across devices. Without it, everything stays in
 | **নামাজের সময়** | Prayer times computed locally from GPS or a chosen city, with six calculation methods (Karachi, MWL, ISNA, Umm al-Qura, Egyptian, Tehran) and adhan reminders. |
 | **কিবলা** | Compass bearing to the Kaaba, plus an optional Google Maps view. |
 | **ইসলামিক জ্ঞানকোষ** | 8 categories, 32 articles, and 9 Bengali video lectures playable in place. |
+| **মসজিদ খুঁজুন** | Split-screen mosque finder on OpenStreetMap. Live geolocation with a Gazipur fallback, Haversine distances, clustered markers, name/street search, Jumu'ah and phone filters, Google Maps directions, and community Jumu'ah/phone info saved to `localStorage`. Real mosques come from the Overpass API within 5 km. |
 | **আরবি ও কুরআন শিক্ষা** | Arabic alphabet and Quran-reading academy with progress tracking. |
 | **ডিজিটাল তাসবিহ** | Tap counter with presets, haptics, and session history. |
 | **আল্লাহর ৯৯ নাম** | The 99 names with meanings and explanations. |
@@ -81,7 +82,10 @@ npm run dev
 ```
 
 The dev server runs `server.ts` on <http://localhost:3000> and proxies Vite
-through it, so the AI endpoints and `/api/content` work locally.
+through it, so the AI endpoints and `/api/content` work locally. That server is
+for local development only; the deployed site at
+<https://shawonhaque.github.io/Islamic-Life/> is the static build described
+under [Deployment](#deployment).
 
 For AI features, copy `.env.example` to `.env.local` and set `GEMINI_API_KEY`.
 Without it the AI studio still loads and explains that a key is needed — you

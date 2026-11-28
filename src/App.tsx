@@ -11,7 +11,6 @@ import { NamazPage } from './components/NamazPage';
 import { KnowledgeHubPage } from './components/KnowledgeHubPage';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { PrayerTimePage, QiblaPage } from './components/PrayerTimeQiblaPage';
-import { QuranPage } from './components/QuranPage';
 import { CalendarPage, RamadanPage } from './components/RamadanCalendarPage';
 import { SidebarNav } from './components/SidebarNav';
 import { TasbihPage, ZakatPage } from './components/TasbihZakatPage';
@@ -35,6 +34,9 @@ const MosqueFinderPage = lazy(() =>
 );
 const EarthGlobe = lazy(() =>
   import('./components/EarthGlobe').then((m) => ({ default: m.EarthGlobe }))
+);
+const QuranPage = lazy(() =>
+  import('./components/QuranPage').then((m) => ({ default: m.QuranPage }))
 );
 import { useAuth } from './contexts/AuthContext';
 import { useSettings } from './contexts/SettingsContext';
@@ -416,12 +418,14 @@ export default function App() {
           )}
 
           {activeSection === 'quran' && (
-            <QuranPage
-              lang={lang}
-              surahs={surahs}
-              ayahs={ayahs}
-              jumpTo={quranJumpTarget}
-            />
+            <Suspense fallback={<SectionFallback lang={lang} />}>
+              <QuranPage
+                lang={lang}
+                surahs={surahs}
+                ayahs={ayahs}
+                jumpTo={quranJumpTarget}
+              />
+            </Suspense>
           )}
 
           {activeSection === 'tafsir' && (

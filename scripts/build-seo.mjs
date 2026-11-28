@@ -14,9 +14,9 @@ Allow: /
 
 # Search results, the admin area and the API are not useful to crawl.
 Disallow: /api/
-Disallow: ${SITE_URL}search/
-Disallow: ${SITE_URL}admin/
-Disallow: ${SITE_URL}settings/
+Disallow: /Islamic-Life/search/
+Disallow: /Islamic-Life/admin/
+Disallow: /Islamic-Life/settings/
 
 Sitemap: ${SITE_URL}sitemap.xml
 `;

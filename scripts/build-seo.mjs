@@ -30,6 +30,8 @@ const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 </urlset>
 `;
 
+fs.copyFileSync(path.resolve(process.cwd(), 'assets/og-cover.jpg'), path.join(PUBLIC_DIR, 'og-cover.jpg'));
+
 fs.writeFileSync(path.join(PUBLIC_DIR, 'robots.txt'), robots, 'utf8');
 fs.writeFileSync(path.join(PUBLIC_DIR, 'sitemap.xml'), sitemap, 'utf8');
 console.log('Wrote public/robots.txt and public/sitemap.xml');

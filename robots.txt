@@ -1,9 +1,10 @@
 User-agent: *
 Allow: /
 
-# The app is a single page with state-driven navigation, so every section
-# lives under the root URL. Search result pages and the API are not useful
-# to crawl.
+# Search results, the admin area and the API are not useful to crawl.
 Disallow: /api/
+Disallow: https://shawonhaque.github.io/Islamic-Life/search/
+Disallow: https://shawonhaque.github.io/Islamic-Life/admin/
+Disallow: https://shawonhaque.github.io/Islamic-Life/settings/
 
 Sitemap: https://shawonhaque.github.io/Islamic-Life/sitemap.xml

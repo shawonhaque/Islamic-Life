@@ -12,21 +12,53 @@ fs.mkdirSync(PUBLIC_DIR, { recursive: true });
 const robots = `User-agent: *
 Allow: /
 
-# The app is a single page with state-driven navigation, so every section
-# lives under the root URL. Search result pages and the API are not useful
-# to crawl.
+# Search results, the admin area and the API are not useful to crawl.
 Disallow: /api/
+Disallow: ${SITE_URL}search/
+Disallow: ${SITE_URL}admin/
+Disallow: ${SITE_URL}settings/
 
 Sitemap: ${SITE_URL}sitemap.xml
 `;
 
+// Every section has its own page, and so does each surah. Keep this list in
+// sync with the sections that scripts/build-routes.mjs writes.
+const SECTIONS = [
+  'quran',
+  'tafsir',
+  'hadith',
+  'dua',
+  'namaz',
+  'prayer-time',
+  'qibla',
+  'tasbih',
+  'zakat',
+  'ramadan',
+  'calendar',
+  'hajj-umrah',
+  'names-99',
+  'knowledge',
+  'mosque-finder',
+  'arabic-learning',
+  'ai-studio',
+  'terrarium',
+];
+
+const url = (loc, priority) => `  <url>
+    <loc>${loc}</loc>
+    <changefreq>weekly</changefreq>
+    <priority>${priority}</priority>
+  </url>`;
+
+const entries = [
+  url(SITE_URL, '1.0'),
+  ...SECTIONS.map((slug) => url(`${SITE_URL}${slug}/`, '0.8')),
+  ...Array.from({ length: 114 }, (_, i) => url(`${SITE_URL}quran/${i + 1}/`, '0.6')),
+];
+
 const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${SITE_URL}</loc>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
+${entries.join('\n')}
 </urlset>
 `;
 

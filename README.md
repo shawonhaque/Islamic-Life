@@ -132,6 +132,19 @@ publish `firestore.rules` so users can only read and write their own documents.
 Without sign-in, settings and progress stay in `localStorage` and
 **Settings → Backup → Export** downloads a JSON snapshot.
 
+### URLs and sitemap
+
+Every section is also a page of its own, and so is each surah:
+`/quran/`, `/namaz/`, `/qibla/`, …, and `/quran/2/` for Al-Baqarah.
+`scripts/build-routes.mjs` writes those pages from the app shell after
+`vite build`, each with its own title, description and canonical URL, so a
+shared link answers 200 on GitHub Pages instead of the 404 fallback. In the
+app, `src/utils/routes.ts` reads the section (and surah) from the path, keeps
+the address bar in step as you navigate, and handles back and forward.
+
+`scripts/build-seo.mjs` lists the same URLs in `sitemap.xml` and disallows
+`/search/`, `/admin/`, `/settings/` and `/api/` in `robots.txt`.
+
 ## Project layout
 
 ```
@@ -145,7 +158,7 @@ src/
   types/        shared domain types
   utils/        prayer maths, weather, Gemini client, fetch helpers
 data/quran/     114 surah snapshots (~140 MB, tracked), read by fetch-quran.mjs
-scripts/        build-time generators for Quran data, brand, SEO, search index
+scripts/        build-time generators for Quran data, brand, SEO, routes, search index
 server.ts       express API, dev only
 firestore.rules security rules for user documents
 ```

@@ -43,6 +43,7 @@ import { useSettings } from './contexts/SettingsContext';
 import { SEED_DUAS, SEED_HADITHS } from './data/islamicSeed';
 import { SEED_AYAHS, SEED_SURAHS } from './data/surahs114';
 import { useNotificationScheduler } from './hooks/useNotificationScheduler';
+import { parseRoute, routePath } from './utils/routes';
 import type {
   Ayah,
   CityLocation,
@@ -100,7 +101,9 @@ function readStoredCity(): CityLocation | null {
 
 export default function App() {
   const { settings, resolvedLang: lang, use24Hour, toggleLanguageQuick } = useSettings();
-  const [activeSection, setActiveSection] = useState<SectionId>('home');
+  const [activeSection, setActiveSection] = useState<SectionId>(
+    () => parseRoute(window.location.pathname).section
+  );
   const [fullscreenTerrarium, setFullscreenTerrarium] = useState<boolean>(false);
   const [notifModalOpen, setNotifModalOpen] = useState<boolean>(false);
   const [locationModalOpen, setLocationModalOpen] = useState<boolean>(false);
@@ -111,7 +114,10 @@ export default function App() {
     surahNumber: number;
     ayahNumber: number;
     key: number;
-  } | null>(null);
+  } | null>(() => {
+    const { surah } = parseRoute(window.location.pathname);
+    return surah ? { surahNumber: surah, ayahNumber: 1, key: Date.now() } : null;
+  });
   const [hadithDuaFocus, setHadithDuaFocus] = useState<{ query: string; key: number }>({
     query: '',
     key: 0,
@@ -276,7 +282,24 @@ export default function App() {
     hadiths,
   });
 
+  // Back and forward move between the sections the history recorded.
+  useEffect(() => {
+    const onPopState = () => {
+      const route = parseRoute(window.location.pathname);
+      setActiveSection(route.section);
+      if (route.surah) {
+        setQuranJumpTarget({ surahNumber: route.surah, ayahNumber: 1, key: Date.now() });
+      }
+    };
+    window.addEventListener('popstate', onPopState);
+    return () => window.removeEventListener('popstate', onPopState);
+  }, []);
+
   const handleNavigate = (section: SectionId) => {
+    const nextPath = routePath(section);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({ section }, '', nextPath);
+    }
     setActiveSection(section);
     setFullscreenTerrarium(false);
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -289,7 +312,13 @@ export default function App() {
 
   const handleOpenQuranVerse = (surahNumber: number, ayahNumber: number) => {
     setQuranJumpTarget({ surahNumber, ayahNumber, key: Date.now() });
-    handleNavigate('quran');
+    const nextPath = routePath('quran', surahNumber);
+    if (window.location.pathname !== nextPath) {
+      window.history.pushState({ section: 'quran', surah: surahNumber }, '', nextPath);
+    }
+    setActiveSection('quran');
+    setFullscreenTerrarium(false);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleOpenHadithFromSearch = (hadith: Hadith) => {

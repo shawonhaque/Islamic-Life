@@ -3,8 +3,8 @@ Allow: /
 
 # Search results, the admin area and the API are not useful to crawl.
 Disallow: /api/
-Disallow: https://shawonhaque.github.io/Islamic-Life/search/
-Disallow: https://shawonhaque.github.io/Islamic-Life/admin/
-Disallow: https://shawonhaque.github.io/Islamic-Life/settings/
+Disallow: /Islamic-Life/search/
+Disallow: /Islamic-Life/admin/
+Disallow: /Islamic-Life/settings/
 
 Sitemap: https://shawonhaque.github.io/Islamic-Life/sitemap.xml

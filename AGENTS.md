@@ -3,7 +3,8 @@
 ## Build and verify
 
 - `npm run build` runs `scripts/build-quran.mjs` → `scripts/build-brand.mjs` →
-  `scripts/build-seo.mjs` → `scripts/build-search-index.mjs` → `vite build`.
+  `scripts/build-seo.mjs` → `scripts/build-search-index.mjs` → `vite build` →
+  `scripts/build-routes.mjs` (writes one page per section and per surah).
 - Deploy builds need `GITHUB_PAGES=true` so Vite emits `/Islamic-Life/` asset URLs.
 - `npx tsc --noEmit` is the only lint; there is no test runner in this repo.
 - To reproduce the deploy locally, serve `dist/` so unknown paths answer
@@ -12,6 +13,15 @@
 - Verify UI changes with Playwright at a 1440px viewport. Headless Chromium
   needs `--use-gl=swiftshader --enable-unsafe-swiftshader` for the Three.js
   views, otherwise the canvas stays blank.
+
+## Routes
+
+- Sections are paths: `/quran/`, `/namaz/`, `/qibla/`, and the reader adds the
+  surah (`/quran/2/`). `src/utils/routes.ts` parses the path on boot and writes
+  history on navigation; a new section needs both a `SectionId` and an entry in
+  `SECTIONS` in `scripts/build-routes.mjs` and `scripts/build-seo.mjs`.
+- Route metadata lives in `scripts/build-routes.mjs`: each page gets its own
+  title, description, canonical and `og:url`.
 
 ## Deploy
 
